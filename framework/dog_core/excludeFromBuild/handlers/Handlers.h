@@ -7,6 +7,7 @@
 #include "PipelineHandler.h"
 #include "PipelineParameterHandler.h"
 #include "DenoiserHandler.h"
+#include "ModelHandler.h"
 #include "SceneHandler.h"
 #include "TextureHandler.h"
 #include "EnvironmentHandler.h"
@@ -31,12 +32,12 @@ struct Handlers
         pipeline = PipelineHandler::create(ctx);
         pipelineParameter = PipelineParameterHandler::create(ctx);
         denoiser = DenoiserHandler::create(ctx);
+        model = ModelHandler::create(ctx);  // Initialize before SceneHandler
         scene = SceneHandler::create(ctx);
         texture = TextureHandler::create(ctx);
         environment = EnvironmentHandler::create(ctx);
         // Future handlers will be initialized here:
         // material = MaterialHandler::create(ctx);
-        // model = ModelHandler::create(ctx);
         // areaLight = AreaLightHandler::create(ctx);
     }
 
@@ -50,23 +51,23 @@ struct Handlers
         pipeline.reset();
         environment.reset();
         texture.reset();
-        scene.reset();
+        scene.reset();  // SceneHandler depends on ModelHandler
+        model.reset();   // ModelHandler should be reset after SceneHandler
         // Future handlers will be reset here in reverse dependency order:
         // areaLight.reset();
         // material.reset();
-        // model.reset();
     }
 
     ScreenBufferHandlerPtr screenBuffer = nullptr;       // Manages screen rendering buffers
     PipelineHandlerPtr pipeline = nullptr;               // Manages OptiX rendering pipelines
     PipelineParameterHandlerPtr pipelineParameter = nullptr; // Manages pipeline launch parameters
     DenoiserHandlerPtr denoiser = nullptr;               // Manages OptiX AI denoising
+    ModelHandlerPtr model = nullptr;                     // Manages geometry and materials
     SceneHandlerPtr scene = nullptr;                     // Manages scene graph and acceleration structures
     TextureHandlerPtr texture = nullptr;                 // Manages texture resources
     EnvironmentHandlerPtr environment = nullptr;         // Manages environment lighting
     // Future handlers:
     // MaterialHandlerPtr material = nullptr;      // Manages material creation and updates
-    // ModelHandlerPtr model = nullptr;            // Manages 3D model geometry
     // AreaLightHandlerPtr areaLight = nullptr;    // Manages mesh-based lighting system
 };
 

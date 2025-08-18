@@ -40,6 +40,7 @@
 
 #include "../common/common_host.h"
 #include "../DogShared.h"
+#include "ModelHandler.h"  // For GeometryGroupResources and GeometryInstanceResources
 #include <sabi_core/sabi_core.h>
 
 // Forward declarations
@@ -100,12 +101,13 @@ public:
     bool hasGeometry() const { return has_geometry_; }
 
     // Get scene data limits
-    static constexpr uint32_t getMaxMaterials() { return maxNumMaterials; }
+    static constexpr uint32_t getMaxMaterials() { return ModelHandler::maxNumMaterials; }
     static constexpr uint32_t getMaxGeometryInstances() { return maxNumGeometryInstances; }
     static constexpr uint32_t getMaxInstances() { return maxNumInstances; }
 
     // Buffer access for pipeline parameter setup
-    const cudau::TypedBuffer<shared::DisneyData>& getMaterialDataBuffer() const { return material_data_buffer_; }
+    // Material buffer is now accessed through ModelHandler
+    const cudau::TypedBuffer<shared::DisneyData>& getMaterialDataBuffer() const;
     const cudau::TypedBuffer<shared::GeometryInstanceData>& getGeomInstDataBuffer() const { return geom_inst_data_buffer_; }
     const cudau::TypedBuffer<shared::InstanceData>& getInstanceDataBuffer(int index) const 
     { 
@@ -119,12 +121,10 @@ public:
     bool removeRenderableNodeByID(ItemID nodeID);
     size_t getNodeCount() const { return node_resources_.size(); }
     
-    // Test method for verifying basic functionality
-    void testNodeManagement();
 
 private:
     // Scene limits (conservative for interactive use)
-    static constexpr uint32_t maxNumMaterials = 256;
+    // Note: maxNumMaterials is now defined in ModelHandler
     static constexpr uint32_t maxNumGeometryInstances = 4096;
     static constexpr uint32_t maxNumInstances = 1024;
     
@@ -142,25 +142,8 @@ private:
         uint32_t optix_instance_index = UINT32_MAX;  // Index in IAS instance buffer
     };
     
-    // Structure for a single geometry instance (one surface, one material)
-    struct GeometryInstanceResources
-    {
-        optixu::GeometryInstance optix_geom_inst;
-        cudau::TypedBuffer<shared::Triangle> triangle_buffer;
-        uint32_t material_slot = 0;
-        AABB aabb;
-    };
-    
-    // Structure to cache geometry acceleration structures (groups multiple surfaces)
-    struct GeometryGroupResources
-    {
-        optixu::GeometryAccelerationStructure gas;
-        cudau::Buffer gas_mem;
-        cudau::TypedBuffer<shared::Vertex> vertex_buffer;  // Shared by all surfaces
-        std::vector<GeometryInstanceResources> geom_instances;
-        AABB aabb;
-        uint32_t ref_count = 0;
-    };
+    // GeometryInstanceResources and GeometryGroupResources are now defined in ModelHandler.h
+    // ModelHandler is accessed through RenderContext
 
     RenderContextPtr ctx_ = nullptr;
     bool initialized_ = false;
@@ -170,12 +153,11 @@ private:
     OptixTraversableHandle traversable_handle_ = 0;
     
     // Slot management for resource allocation
-    SlotFinder material_slot_finder_;
     SlotFinder geom_inst_slot_finder_;
     SlotFinder inst_slot_finder_;
     
     // Data buffers matching DogShared::StaticPipelineLaunchParameters
-    cudau::TypedBuffer<shared::DisneyData> material_data_buffer_;
+    // Note: material_data_buffer_ is now managed by ModelHandler
     cudau::TypedBuffer<shared::GeometryInstanceData> geom_inst_data_buffer_;
     cudau::TypedBuffer<shared::InstanceData> inst_data_buffer_[2]; // Double buffered for motion
     
@@ -192,13 +174,8 @@ private:
     // Node tracking - maps ItemID to resources
     std::unordered_map<ItemID, NodeResources> node_resources_;
     
-    // Geometry cache - maps geometry hash to GeometryGroup (GAS)
-    std::unordered_map<size_t, GeometryGroupResources> geometry_cache_;
-    
-    // Helper methods for geometry creation
-    bool createGeometryGroup(CgModelPtr cgModel, size_t hash, GeometryGroupResources& resources);
+    // Helper method for creating node instances
     bool createNodeInstance(NodeResources& nodeRes, const GeometryGroupResources& geomGroup);
-    size_t computeGeometryHash(CgModelPtr cgModel);
 };
 
 } // namespace dog

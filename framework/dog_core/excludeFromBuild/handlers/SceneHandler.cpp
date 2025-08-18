@@ -1,5 +1,6 @@
 #include "SceneHandler.h"
 #include "../RenderContext.h"
+#include "Handlers.h"  // For accessing ModelHandler through Handlers struct
 #include <g3log/g3log.hpp>
 
 namespace dog
@@ -32,24 +33,22 @@ bool SceneHandler::initialize()
     try
     {
         // Initialize slot finders for resource allocation tracking
-        material_slot_finder_.initialize(maxNumMaterials);
+        // Note: material_slot_finder is now managed by ModelHandler
         geom_inst_slot_finder_.initialize(maxNumGeometryInstances);
         inst_slot_finder_.initialize(maxNumInstances);
         
         LOG(DBUG) << "SceneHandler slot finders initialized:";
-        LOG(DBUG) << "  Max materials: " << maxNumMaterials;
         LOG(DBUG) << "  Max geometry instances: " << maxNumGeometryInstances;
         LOG(DBUG) << "  Max instances: " << maxNumInstances;
         
         // Initialize data buffers on device
         CUcontext cuContext = ctx_->getCudaContext();
-        material_data_buffer_.initialize(cuContext, cudau::BufferType::Device, maxNumMaterials);
+        // Note: material_data_buffer is now managed by ModelHandler
         geom_inst_data_buffer_.initialize(cuContext, cudau::BufferType::Device, maxNumGeometryInstances);
         inst_data_buffer_[0].initialize(cuContext, cudau::BufferType::Device, maxNumInstances);
         inst_data_buffer_[1].initialize(cuContext, cudau::BufferType::Device, maxNumInstances);
         
         LOG(DBUG) << "SceneHandler data buffers initialized";
-        LOG(DBUG) << "  Material buffer size: " << maxNumMaterials;
         LOG(DBUG) << "  GeomInst buffer size: " << maxNumGeometryInstances;
         LOG(DBUG) << "  Instance buffers size: " << maxNumInstances << " (double buffered)";
         
@@ -118,7 +117,7 @@ void SceneHandler::finalize()
     inst_data_buffer_[1].finalize();
     inst_data_buffer_[0].finalize();
     geom_inst_data_buffer_.finalize();
-    material_data_buffer_.finalize();
+    // Note: material_data_buffer is now managed by ModelHandler
     
     // Clean up light distribution
     light_inst_dist_.finalize();
@@ -126,7 +125,7 @@ void SceneHandler::finalize()
     // Clean up slot finders
     inst_slot_finder_.finalize();
     geom_inst_slot_finder_.finalize();
-    material_slot_finder_.finalize();
+    // Note: material_slot_finder is now managed by ModelHandler
 
     traversable_handle_ = 0;
     has_geometry_ = false;
@@ -231,6 +230,19 @@ bool SceneHandler::buildAccelerationStructures()
     }
 }
 
+const cudau::TypedBuffer<shared::DisneyData>& SceneHandler::getMaterialDataBuffer() const
+{
+    // Get material buffer from ModelHandler
+    auto handlers = ctx_->getHandlers();
+    if (!handlers || !handlers->model)
+    {
+        static cudau::TypedBuffer<shared::DisneyData> emptyBuffer;
+        LOG(WARNING) << "ModelHandler not available for material buffer access";
+        return emptyBuffer;
+    }
+    return handlers->model->getMaterialDataBuffer();
+}
+
 void SceneHandler::update()
 {
     if (!initialized_)
@@ -320,34 +332,41 @@ bool SceneHandler::addRenderableNode(RenderableWeakRef weakNode)
     }
     inst_slot_finder_.setInUse(resources.instance_slot);
 
+    // Get ModelHandler from RenderContext
+    auto handlers = ctx_->getHandlers();
+    if (!handlers || !handlers->model)
+    {
+        LOG(WARNING) << "ModelHandler not available";
+        inst_slot_finder_.setNotInUse(resources.instance_slot);
+        return false;
+    }
+    ModelHandler* modelHandler = handlers->model.get();
+    
     // Compute hash of the geometry for caching
-    resources.geometry_hash = computeGeometryHash(cgModel);
+    resources.geometry_hash = ModelHandler::computeGeometryHash(cgModel);
     
-    // Check if we already have this geometry cached
-    auto geomIt = geometry_cache_.find(resources.geometry_hash);
-    GeometryGroupResources* geomGroup = nullptr;
+    // Check if ModelHandler already has this geometry cached
+    GeometryGroupResources* geomGroup = modelHandler->getGeometry(resources.geometry_hash);
     
-    if (geomIt != geometry_cache_.end())
+    if (geomGroup)
     {
         // Reuse existing geometry group
-        geomGroup = &geomIt->second;
-        geomGroup->ref_count++;
+        modelHandler->incrementRefCount(resources.geometry_hash);
         LOG(DBUG) << "Reusing cached geometry group (hash: " << resources.geometry_hash << ", refs: " << geomGroup->ref_count << ")";
     }
     else
     {
-        // Create new geometry group
+        // Create new geometry group using ModelHandler
         GeometryGroupResources newGeomGroup;
-        if (!createGeometryGroup(cgModel, resources.geometry_hash, newGeomGroup))
+        if (!modelHandler->createGeometryGroup(cgModel, resources.geometry_hash, newGeomGroup))
         {
             LOG(WARNING) << "Failed to create geometry group for node " << nodeID;
             inst_slot_finder_.setNotInUse(resources.instance_slot);
             return false;
         }
         
-        geometry_cache_[resources.geometry_hash] = std::move(newGeomGroup);
-        geomGroup = &geometry_cache_[resources.geometry_hash];
-        geomGroup->ref_count = 1;
+        modelHandler->addGeometry(resources.geometry_hash, std::move(newGeomGroup));
+        geomGroup = modelHandler->getGeometry(resources.geometry_hash);
         LOG(INFO) << "Created new geometry group (hash: " << resources.geometry_hash << ")";
     }
     
@@ -357,7 +376,7 @@ bool SceneHandler::addRenderableNode(RenderableWeakRef weakNode)
     {
         LOG(WARNING) << "Cannot add node " << nodeID << " - geometry instance slots full";
         inst_slot_finder_.setNotInUse(resources.instance_slot);
-        geomGroup->ref_count--;
+        modelHandler->decrementRefCount(resources.geometry_hash);
         return false;
     }
     geom_inst_slot_finder_.setInUse(resources.geom_inst_slot);
@@ -368,7 +387,7 @@ bool SceneHandler::addRenderableNode(RenderableWeakRef weakNode)
         LOG(WARNING) << "Failed to create OptiX instance for node " << nodeID;
         inst_slot_finder_.setNotInUse(resources.instance_slot);
         geom_inst_slot_finder_.setNotInUse(resources.geom_inst_slot);
-        geomGroup->ref_count--;
+        modelHandler->decrementRefCount(resources.geometry_hash);
         return false;
     }
     
@@ -441,6 +460,16 @@ bool SceneHandler::removeRenderableNodeByID(ItemID nodeID)
         geom_inst_slot_finder_.setNotInUse(resources.geom_inst_slot);
     }
     
+    // Decrement geometry reference count in ModelHandler
+    if (resources.geometry_hash != 0)
+    {
+        auto handlers = ctx_->getHandlers();
+        if (handlers && handlers->model)
+        {
+            handlers->model->decrementRefCount(resources.geometry_hash);
+        }
+    }
+    
     // Clear the stored flag if node still exists
     if (RenderableNode node = resources.node.lock())
     {
@@ -465,260 +494,7 @@ bool SceneHandler::removeRenderableNodeByID(ItemID nodeID)
     return true;
 }
 
-void SceneHandler::testNodeManagement()
-{
-    LOG(INFO) << "=== Testing SceneHandler Node Management ===";
-    
-    // Create a test node with minimal valid data
-    RenderableNode testNode = sabi::WorldItem::create();
-    testNode->setName("TestNode1");
-    
-    // Create a simple test CgModel
-    CgModelPtr testModel = sabi::CgModel::create();
-    testModel->V.resize(3, 3);  // 3 vertices
-    testModel->V.col(0) = Eigen::Vector3f(0, 0, 0);
-    testModel->V.col(1) = Eigen::Vector3f(1, 0, 0);
-    testModel->V.col(2) = Eigen::Vector3f(0, 1, 0);
-    
-    testModel->N.resize(3, 3);  // 3 normals
-    testModel->N.col(0) = Eigen::Vector3f(0, 0, 1);
-    testModel->N.col(1) = Eigen::Vector3f(0, 0, 1);
-    testModel->N.col(2) = Eigen::Vector3f(0, 0, 1);
-    
-    // Add a surface with one triangle
-    sabi::CgModelSurface surface;
-    surface.vertexCount = 3;
-    surface.F.resize(3, 1);  // F is the triangle indices matrix (MatrixXu = unsigned)
-    surface.F(0, 0) = 0;
-    surface.F(1, 0) = 1;
-    surface.F(2, 0) = 2;
-    testModel->S.push_back(surface);
-    testModel->triCount = 1;
-    
-    testNode->setModel(testModel);
-    
-    LOG(INFO) << "Test 1: Add node to scene";
-    size_t initialCount = getNodeCount();
-    bool addResult = addRenderableNode(testNode);
-    LOG(INFO) << "  Add result: " << (addResult ? "SUCCESS" : "FAILED");
-    LOG(INFO) << "  Node count: " << initialCount << " -> " << getNodeCount();
-    
-    LOG(INFO) << "Test 2: Try to add same node again";
-    bool addAgainResult = addRenderableNode(testNode);
-    LOG(INFO) << "  Add again result: " << (addAgainResult ? "SUCCESS (already exists)" : "FAILED");
-    LOG(INFO) << "  Node count: " << getNodeCount();
-    
-    LOG(INFO) << "Test 3: Remove node from scene";
-    bool removeResult = removeRenderableNode(testNode);
-    LOG(INFO) << "  Remove result: " << (removeResult ? "SUCCESS" : "FAILED");
-    LOG(INFO) << "  Node count: " << getNodeCount();
-    
-    LOG(INFO) << "Test 4: Try to remove non-existent node";
-    bool removeAgainResult = removeRenderableNode(testNode);
-    LOG(INFO) << "  Remove again result: " << (!removeAgainResult ? "SUCCESS (node not found)" : "FAILED");
-    
-    LOG(INFO) << "Test 5: Add multiple nodes";
-    RenderableNode testNode2 = sabi::WorldItem::create();
-    testNode2->setName("TestNode2");
-    testNode2->setModel(testModel);
-    
-    RenderableNode testNode3 = sabi::WorldItem::create();
-    testNode3->setName("TestNode3");
-    testNode3->setModel(testModel);
-    
-    addRenderableNode(testNode);
-    addRenderableNode(testNode2);
-    addRenderableNode(testNode3);
-    LOG(INFO) << "  Added 3 nodes, count: " << getNodeCount();
-    
-    LOG(INFO) << "Test 6: Remove by ID";
-    ItemID node2ID = testNode2->getID();
-    bool removeByIDResult = removeRenderableNodeByID(node2ID);
-    LOG(INFO) << "  Remove by ID result: " << (removeByIDResult ? "SUCCESS" : "FAILED");
-    LOG(INFO) << "  Node count: " << getNodeCount();
-    
-    LOG(INFO) << "Test 7: Clear all nodes";
-    removeRenderableNode(testNode);
-    removeRenderableNode(testNode3);
-    LOG(INFO) << "  Final node count: " << getNodeCount();
-    LOG(INFO) << "  Has geometry: " << (hasGeometry() ? "YES" : "NO");
-    
-    LOG(INFO) << "=== SceneHandler Node Management Tests Complete ===";
-}
-
-size_t SceneHandler::computeGeometryHash(CgModelPtr cgModel)
-{
-    // Simple hash based on vertex count, triangle count, and a sample of vertex positions
-    std::hash<size_t> hasher;
-    size_t hash = hasher(cgModel->vertexCount());
-    hash ^= hasher(cgModel->triangleCount()) << 1;
-    
-    // Sample a few vertices for better uniqueness
-    if (cgModel->V.cols() > 0)
-    {
-        hash ^= hasher(cgModel->V(0, 0)) << 2;
-        if (cgModel->V.cols() > 1)
-            hash ^= hasher(cgModel->V(0, cgModel->V.cols() - 1)) << 3;
-    }
-    
-    return hash;
-}
-
-bool SceneHandler::createGeometryGroup(CgModelPtr cgModel, size_t hash, GeometryGroupResources& resources)
-{
-    if (!cgModel || !cgModel->isValid())
-    {
-        LOG(WARNING) << "Invalid CgModel for geometry creation";
-        return false;
-    }
-    
-    try
-    {
-        CUcontext cuContext = ctx_->getCudaContext();
-        optixu::Scene optixScene = ctx_->getScene();
-        
-        // Convert CgModel vertices to shared::Vertex format (shared by all surfaces)
-        std::vector<shared::Vertex> vertices;
-        vertices.reserve(cgModel->V.cols());
-        
-        for (int i = 0; i < cgModel->V.cols(); ++i)
-        {
-            shared::Vertex v;
-            v.position = Point3D(cgModel->V(0, i), cgModel->V(1, i), cgModel->V(2, i));
-            
-            // Use normals if available, otherwise default to up vector
-            if (cgModel->N.cols() > i)
-            {
-                v.normal = Normal3D(cgModel->N(0, i), cgModel->N(1, i), cgModel->N(2, i));
-                v.normal = normalize(v.normal);
-            }
-            else
-            {
-                v.normal = Normal3D(0, 1, 0);
-            }
-            
-            // Calculate tangent from normal
-            Vector3D tangent, bitangent;
-            float sign = v.normal.z >= 0 ? 1.0f : -1.0f;
-            const float a = -1 / (sign + v.normal.z);
-            const float b = v.normal.x * v.normal.y * a;
-            tangent = Vector3D(1 + sign * v.normal.x * v.normal.x * a, sign * b, -sign * v.normal.x);
-            v.texCoord0Dir = normalize(tangent);
-            
-            // Use texture coordinates if available
-            if (cgModel->UV0.cols() > i)
-            {
-                v.texCoord = Point2D(cgModel->UV0(0, i), cgModel->UV0(1, i));
-            }
-            else
-            {
-                v.texCoord = Point2D(0, 0);
-            }
-            
-            vertices.push_back(v);
-            
-            // Update AABB
-            resources.aabb.unify(v.position);
-        }
-        
-        // Create shared vertex buffer for all surfaces
-        resources.vertex_buffer.initialize(cuContext, cudau::BufferType::Device, vertices);
-        
-        // Create Geometry Acceleration Structure
-        resources.gas = optixScene.createGeometryAccelerationStructure();
-        
-        // Create a GeometryInstance for each surface (following sample pattern)
-        for (size_t surfIdx = 0; surfIdx < cgModel->S.size(); ++surfIdx)
-        {
-            const auto& surface = cgModel->S[surfIdx];
-            
-            // Convert surface triangles to shared::Triangle format
-            std::vector<shared::Triangle> triangles;
-            triangles.reserve(surface.F.cols());
-            
-            for (int i = 0; i < surface.F.cols(); ++i)
-            {
-                shared::Triangle tri;
-                tri.index0 = surface.F(0, i);
-                tri.index1 = surface.F(1, i);
-                tri.index2 = surface.F(2, i);
-                triangles.push_back(tri);
-            }
-            
-            if (triangles.empty())
-            {
-                LOG(DBUG) << "Skipping surface " << surfIdx << " - no triangles";
-                continue;
-            }
-            
-            // Create per-surface resources
-            GeometryInstanceResources geomInstRes;
-            
-            // Each surface gets its own triangle buffer
-            geomInstRes.triangle_buffer.initialize(cuContext, cudau::BufferType::Device, triangles);
-            
-            // TODO: Allocate material slot based on surface.material or surface.cgMaterial
-            geomInstRes.material_slot = 0;  // Default material for now
-            
-            // Create OptiX geometry instance for this surface
-            geomInstRes.optix_geom_inst = optixScene.createGeometryInstance();
-            geomInstRes.optix_geom_inst.setVertexBuffer(resources.vertex_buffer);  // Use shared vertex buffer
-            geomInstRes.optix_geom_inst.setTriangleBuffer(geomInstRes.triangle_buffer);
-            geomInstRes.optix_geom_inst.setNumMaterials(1, optixu::BufferView());
-            geomInstRes.optix_geom_inst.setMaterial(0, 0, ctx_->getDefaultMaterial());  // Set default material
-            geomInstRes.optix_geom_inst.setUserData(surfIdx);  // Store surface index
-            
-            // Add to GAS
-            resources.gas.addChild(geomInstRes.optix_geom_inst);
-            
-            // Store in geometry group
-            resources.geom_instances.push_back(std::move(geomInstRes));
-            
-            LOG(DBUG) << "Created GeometryInstance for surface " << surfIdx 
-                      << " (" << triangles.size() << " triangles)";
-        }
-        
-        if (resources.geom_instances.empty())
-        {
-            LOG(WARNING) << "No valid surfaces found in CgModel";
-            return false;
-        }
-        
-        LOG(INFO) << "Creating GeometryGroup with " << resources.geom_instances.size() 
-                  << " surfaces, " << vertices.size() << " vertices total";
-        
-        // Configure and build GAS
-        resources.gas.setNumMaterialSets(1);
-        resources.gas.setNumRayTypes(0, 1);  // Single ray type for now
-        resources.gas.setConfiguration(
-            optixu::ASTradeoff::PreferFastBuild,
-            optixu::AllowUpdate::No,
-            optixu::AllowCompaction::No);
-        
-        // Prepare and build GAS
-        OptixAccelBufferSizes gasSizes;
-        resources.gas.prepareForBuild(&gasSizes);
-        
-        resources.gas_mem.initialize(cuContext, cudau::BufferType::Device, gasSizes.outputSizeInBytes, 1);
-        
-        cudau::Buffer gasScratch;
-        gasScratch.initialize(cuContext, cudau::BufferType::Device, gasSizes.tempSizeInBytes, 1);
-        
-        CUstream stream = ctx_->getCudaStream();
-        resources.gas.rebuild(stream, resources.gas_mem, gasScratch);
-        
-        gasScratch.finalize();
-        
-        LOG(INFO) << "Created GAS with handle: " << resources.gas.getHandle();
-        
-        return true;
-    }
-    catch (const std::exception& ex)
-    {
-        LOG(WARNING) << "Failed to create geometry resources: " << ex.what();
-        return false;
-    }
-}
+// Note: computeGeometryHash and createGeometryGroup methods have been moved to ModelHandler
 
 bool SceneHandler::createNodeInstance(NodeResources& nodeRes, const GeometryGroupResources& geomGroup)
 {

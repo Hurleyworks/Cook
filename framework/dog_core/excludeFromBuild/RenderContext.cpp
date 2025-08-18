@@ -176,6 +176,17 @@ bool RenderContext::initializeHandlers()
         LOG(INFO) << "Denoiser handler initialized at " << render_width_ << "x" << render_height_;
     }
     
+    // Initialize model handler (before scene handler since scene depends on it)
+    if (handlers_->model)
+    {
+        if (!handlers_->model->initialize(getPtr()))
+        {
+            LOG(WARNING) << "Failed to initialize model handler";
+            return false;
+        }
+        LOG(INFO) << "Model handler initialized";
+    }
+    
     // Initialize scene handler
     if (handlers_->scene)
     {
