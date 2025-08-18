@@ -151,29 +151,54 @@ void Renderer::render (const InputEvent& input, bool updateMotion, uint32_t fram
     // Determine buffer index for double buffering
     uint32_t bufferIndex = frameNumber % 2;
     
-    // Phase 1: Process input
-    // TODO: Update camera based on input events
+    // Phase 1: Process input and update camera
+    updateCameraBody(input);
+    
+    // Check if we need to restart accumulation due to camera changes
+    if (cameraChanged_ || restartAccumulation_)
+    {
+        accumulationFrame_ = 0;
+        cameraChanged_ = false;
+        restartAccumulation_ = false;
+        LOG (DBUG) << "  Restarting accumulation due to camera change";
+    }
+    else if (accumulationFrame_ < maxAccumulationFrames_)
+    {
+        accumulationFrame_++;
+    }
     
     // Phase 2: Scene update (if motion is enabled)
     if (updateMotion)
     {
+        // Reset accumulation when scene is animating
+        accumulationFrame_ = 0;
+        
         // TODO: Update animated objects
         // TODO: Rebuild acceleration structures if needed
         LOG (DBUG) << "  Updating motion for frame " << frameNumber;
     }
     
     // Phase 3: Update pipeline parameters
-    // TODO: Update per-frame uniforms
+    // TODO: Update per-frame uniforms with camera data
     // TODO: Set accumulation count
+    // Example of what will be done:
+    // per_frame_params.camera = currentCamera_;
+    // per_frame_params.prevCamera = previousCamera_;
+    // per_frame_params.accumFrame = accumulationFrame_;
+    // per_frame_params.bufferIndex = bufferIndex;
     
     // Phase 4: Rendering stages (all on current stream)
     // TODO: G-buffer generation
     // TODO: Path tracing kernel launch
     // TODO: Post-processing
     
-    LOG (DBUG) << "  Rendering on stream for buffer " << bufferIndex;
+    LOG (DBUG) << "  Rendering on stream for buffer " << bufferIndex 
+               << ", accumulation frame " << accumulationFrame_;
     
-    // Phase 5: Frame finalization
+    // Phase 5: Update camera sensor (if applicable, e.g., LightWave integration)
+    updateCameraSensor();
+    
+    // Phase 6: Frame finalization
     // Swap streams for next frame (records end event on current stream)
     renderContext_->swapStreams();
     
@@ -326,4 +351,138 @@ void Renderer::removeRenderableNodeByID (ItemID nodeID)
     {
         LOG (DBUG) << "Node " << nodeID << " was not in SceneHandler";
     }
+}
+
+void Renderer::updateCameraBody (const InputEvent& input)
+{
+    if (!renderContext_)
+    {
+        return;
+    }
+
+    // Store last input
+    lastInput_ = input;
+
+    // Save previous camera for temporal effects
+    previousCamera_ = currentCamera_;
+
+    // Get camera from render context
+    auto camera = renderContext_->getCamera();
+    if (!camera)
+    {
+        LOG (WARNING) << "No camera available";
+        return;
+    }
+
+    // Check if camera has changed
+    if (camera->isDirty() || camera->hasSettingsChanged())
+    {
+        cameraChanged_ = true;
+        restartAccumulation_ = true;
+
+        // Update camera parameters
+        sabi::CameraSensor* sensor = camera->getSensor();
+        if (sensor)
+        {
+            currentCamera_.aspect = sensor->getPixelAspectRatio();
+        }
+        else
+        {
+            // Use render dimensions from context
+            int renderWidth = renderContext_->getRenderWidth();
+            int renderHeight = renderContext_->getRenderHeight();
+            currentCamera_.aspect = static_cast<float> (renderWidth) / static_cast<float> (renderHeight);
+        }
+        currentCamera_.fovY = camera->getVerticalFOVradians();
+
+        // Get camera position
+        Eigen::Vector3f eyePoint = camera->getEyePoint();
+        currentCamera_.position = Point3D (eyePoint.x(), eyePoint.y(), eyePoint.z());
+
+        // Build camera orientation matrix from camera vectors
+        Eigen::Vector3f right = camera->getRight();
+        const Eigen::Vector3f& up = camera->getUp();
+        const Eigen::Vector3f& forward = camera->getFoward();
+
+        // Fix for standalone applications - negate right vector to correct trackball rotation
+        // (not needed in LightWave but required in standalone)
+        right *= -1.0f;
+
+        // Convert to shared types
+        Vector3D camRight (right.x(), right.y(), right.z());
+        Vector3D camUp (up.x(), up.y(), up.z());
+        Vector3D camForward (forward.x(), forward.y(), forward.z());
+
+        // Build orientation matrix from camera basis vectors
+        // Using the same constructor as production code: Matrix3x3(right, up, forward)
+        currentCamera_.orientation = Matrix3x3 (camRight, camUp, camForward);
+
+        // Set lens parameters (depth of field)
+        if (properties.renderProps)
+        {
+            // Note: These would be used for depth of field effects
+            // currentCamera_.lensSize = properties.renderProps->getValOr<float> (RenderKey::Aperture, 0.0f);
+            // currentCamera_.focusDistance = properties.renderProps->getValOr<float> (RenderKey::FocalLength, 5.0f);
+        }
+
+        // Mark camera as not dirty after processing
+        camera->setDirty (false);
+        
+        LOG (DBUG) << "Camera updated - position: (" 
+                   << currentCamera_.position.x << ", " 
+                   << currentCamera_.position.y << ", " 
+                   << currentCamera_.position.z << ")";
+    }
+}
+
+void Renderer::updateCameraSensor()
+{
+    // Get camera from render context
+    if (!renderContext_)
+    {
+        LOG (WARNING) << "No render context available for camera sensor update";
+        return;
+    }
+
+    auto camera = renderContext_->getCamera();
+    if (!camera)
+    {
+        LOG (WARNING) << "No camera available for sensor update";
+        return;
+    }
+
+    // TODO: When we have actual render buffers, we'll update the sensor here
+    // For now this is a stub that will be filled in when we have:
+    // 1. Linear beauty buffer from rendering
+    // 2. Render handler with buffer management
+    
+    // Placeholder for future implementation:
+    /*
+    // Get the linear beauty buffer from render handler
+    if (!renderHandler_ || !renderHandler_->isInitialized())
+    {
+        LOG (WARNING) << "RenderHandler not available or not initialized";
+        return;
+    }
+
+    auto& linearBeautyBuffer = renderHandler_->getLinearBeautyBuffer();
+    
+    // Copy device buffer to host
+    int renderWidth = renderContext_->getRenderWidth();
+    int renderHeight = renderContext_->getRenderHeight();
+    std::vector<float4> hostPixels (renderWidth * renderHeight);
+    linearBeautyBuffer.read (hostPixels.data(), renderWidth * renderHeight);
+
+    // Update the camera sensor with the rendered image
+    bool previewMode = false; // Full quality display
+    uint32_t renderScale = 1; // No scaling
+
+    Eigen::Vector2i renderSize (renderWidth, renderHeight);
+    bool success = camera->getSensor()->updateImage (hostPixels.data(), renderSize, previewMode, renderScale);
+
+    if (!success)
+    {
+        LOG (WARNING) << "Failed to update camera sensor with rendered image";
+    }
+    */
 }

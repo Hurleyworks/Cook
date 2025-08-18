@@ -6,6 +6,7 @@
 
 #include "../dog_core.h"
 #include "RenderContext.h"
+#include "DogShared.h"
 
 using sabi::CameraHandle;
 
@@ -33,12 +34,28 @@ public:
     void removeRenderableNodeByID(ItemID nodeID);
 
 private:
+    // Camera update methods
+    void updateCameraBody(const InputEvent& input);
+    void updateCameraSensor();
+    
     MessageService messengers;
     PropertyService properties;
 
     // Render Context
     RenderContextPtr renderContext_;
 
+    // Camera state tracking
+    DogShared::PerspectiveCamera currentCamera_ = {};
+    DogShared::PerspectiveCamera previousCamera_ = {};
+    bool cameraChanged_ = false;
+    bool restartAccumulation_ = false;
+    
+    // Frame tracking
+    uint32_t accumulationFrame_ = 0;
+    uint32_t maxAccumulationFrames_ = 1024;
+    
+    // Last input state for camera processing
+    InputEvent lastInput_ = {};
 
     // Initialization state
     bool initialized_ = false;
