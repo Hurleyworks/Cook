@@ -34,10 +34,6 @@ bool RenderContext::initialize (int deviceIndex, ImageCacheHandlerPtr imageCache
     scene_ = gpu_context_.getOptixContext().createScene();
     LOG(DBUG) << "OptiX scene created";
     
-    // Create default material for geometry instances
-    defaultMaterial_ = gpu_context_.getOptixContext().createMaterial();
-    LOG(DBUG) << "Default material created";
-    
     // Note: Acceleration structure scratch memory will be allocated by SceneHandler/ModelHandler
     // when those components are implemented
     

@@ -53,9 +53,6 @@ class RenderContext : public std::enable_shared_from_this<RenderContext>
     optixu::Scene getScene() const { return scene_; }
     void setScene (optixu::Scene scene) { scene_ = scene; }
     
-    // Material management
-    optixu::Material getDefaultMaterial() const { return defaultMaterial_; }
-    
     // Render size management - dimensions are automatically managed by camera
     int getRenderWidth() const { return render_width_; }
     int getRenderHeight() const { return render_height_; }
@@ -86,7 +83,6 @@ class RenderContext : public std::enable_shared_from_this<RenderContext>
     
     // OptiX scene
     optixu::Scene scene_;
-    optixu::Material defaultMaterial_;
     
     // Render dimensions
     int render_width_ = 1920;

@@ -49,7 +49,6 @@ using RenderContextPtr = std::shared_ptr<RenderContext>;
 // Bring in sabi types we'll use
 using sabi::RenderableNode;
 using sabi::RenderableWeakRef;
-using sabi::CgModelPtr;
 
 namespace dog
 {
@@ -112,55 +111,12 @@ public:
         return inst_data_buffer_[index % 2]; 
     }
     const LightDistribution& getLightInstDistribution() const { return light_inst_dist_; }
-    
-    // RenderableNode management
-    bool addRenderableNode(RenderableWeakRef node);
-    bool removeRenderableNode(RenderableWeakRef node);
-    bool removeRenderableNodeByID(ItemID nodeID);
-    size_t getNodeCount() const { return node_resources_.size(); }
-    
-    // Test method for verifying basic functionality
-    void testNodeManagement();
 
 private:
     // Scene limits (conservative for interactive use)
     static constexpr uint32_t maxNumMaterials = 256;
     static constexpr uint32_t maxNumGeometryInstances = 4096;
     static constexpr uint32_t maxNumInstances = 1024;
-    
-    // Structure to track resources for each RenderableNode
-    struct NodeResources
-    {
-        RenderableWeakRef node;
-        uint32_t instance_slot = UINT32_MAX;     // Slot in instance buffer
-        uint32_t geom_inst_slot = UINT32_MAX;    // Slot in geometry instance buffer
-        size_t geometry_hash = 0;                // Hash of the CgModel geometry
-        bool is_emissive = false;                // Whether this node has emissive material
-        
-        // OptiX resources
-        optixu::GeometryInstance optix_geom_inst;
-        uint32_t optix_instance_index = UINT32_MAX;  // Index in IAS instance buffer
-    };
-    
-    // Structure for a single geometry instance (one surface, one material)
-    struct GeometryInstanceResources
-    {
-        optixu::GeometryInstance optix_geom_inst;
-        cudau::TypedBuffer<shared::Triangle> triangle_buffer;
-        uint32_t material_slot = 0;
-        AABB aabb;
-    };
-    
-    // Structure to cache geometry acceleration structures (groups multiple surfaces)
-    struct GeometryGroupResources
-    {
-        optixu::GeometryAccelerationStructure gas;
-        cudau::Buffer gas_mem;
-        cudau::TypedBuffer<shared::Vertex> vertex_buffer;  // Shared by all surfaces
-        std::vector<GeometryInstanceResources> geom_instances;
-        AABB aabb;
-        uint32_t ref_count = 0;
-    };
 
     RenderContextPtr ctx_ = nullptr;
     bool initialized_ = false;
@@ -189,16 +145,9 @@ private:
     // Light distribution for importance sampling
     LightDistribution light_inst_dist_;
     
-    // Node tracking - maps ItemID to resources
-    std::unordered_map<ItemID, NodeResources> node_resources_;
-    
-    // Geometry cache - maps geometry hash to GeometryGroup (GAS)
-    std::unordered_map<size_t, GeometryGroupResources> geometry_cache_;
-    
-    // Helper methods for geometry creation
-    bool createGeometryGroup(CgModelPtr cgModel, size_t hash, GeometryGroupResources& resources);
-    bool createNodeInstance(NodeResources& nodeRes, const GeometryGroupResources& geomGroup);
-    size_t computeGeometryHash(CgModelPtr cgModel);
+    // Future members will include:
+    // - Geometry cache (GAS storage)
+    // - Instance tracking maps
 };
 
 } // namespace dog

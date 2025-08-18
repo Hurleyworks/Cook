@@ -1,6 +1,7 @@
 #include "Renderer.h"
 #include <g3log/g3log.hpp>
 #include "tools/PTXManager.h"
+#include "handlers/SceneHandler.h"
 
 Renderer::Renderer()
 {
@@ -89,7 +90,140 @@ void Renderer::addSkyDomeHDR (const std::filesystem::path& hdrPath)
 
 void Renderer::addRenderableNode (RenderableWeakRef& weakNode)
 {
-    LOG (DBUG) << "Renderer::addRenderableNode - stub implementation";
+    LOG (DBUG) << "Renderer::addRenderableNode";
 
-    // Stub implementation - would add node to scene graph
+    if (!initialized_ || !renderContext_)
+    {
+        LOG (WARNING) << "Renderer not initialized, cannot add node";
+        return;
+    }
+
+    // Get the handlers from render context
+    dog::Handlers* handlers = renderContext_->getHandlers();
+    if (!handlers || !handlers->scene)
+    {
+        LOG (WARNING) << "SceneHandler not available";
+        return;
+    }
+
+    // Try to lock the weak reference to check node info
+    if (RenderableNode node = weakNode.lock())
+    {
+        LOG (INFO) << "Adding RenderableNode: " << node->getName() << " (ID: " << node->getID() << ")";
+        
+        // Check if node has valid geometry
+        CgModelPtr cgModel = node->getModel();
+        if (cgModel)
+        {
+            LOG (DBUG) << "  Vertices: " << cgModel->vertexCount() << ", Triangles: " << cgModel->triangleCount();
+        }
+        else
+        {
+            LOG (WARNING) << "  Node has no CgModel geometry";
+        }
+    }
+
+    // Add the node to the scene handler
+    bool success = handlers->scene->addRenderableNode(weakNode);
+    
+    if (success)
+    {
+        LOG (INFO) << "Node successfully added to SceneHandler";
+        LOG (INFO) << "Scene now contains " << handlers->scene->getNodeCount() << " nodes";
+        
+        // Rebuild acceleration structures if needed
+        if (handlers->scene->hasGeometry())
+        {
+            LOG (DBUG) << "Building acceleration structures...";
+            handlers->scene->buildAccelerationStructures();
+        }
+    }
+    else
+    {
+        LOG (WARNING) << "Failed to add node to SceneHandler";
+    }
+}
+
+void Renderer::removeRenderableNode (RenderableWeakRef& weakNode)
+{
+    LOG (DBUG) << "Renderer::removeRenderableNode";
+
+    if (!initialized_ || !renderContext_)
+    {
+        LOG (WARNING) << "Renderer not initialized, cannot remove node";
+        return;
+    }
+
+    // Get the handlers from render context
+    dog::Handlers* handlers = renderContext_->getHandlers();
+    if (!handlers || !handlers->scene)
+    {
+        LOG (WARNING) << "SceneHandler not available";
+        return;
+    }
+
+    // Try to lock the weak reference to check node info
+    if (RenderableNode node = weakNode.lock())
+    {
+        LOG (INFO) << "Removing RenderableNode: " << node->getName() << " (ID: " << node->getID() << ")";
+    }
+
+    // Remove the node from the scene handler
+    bool success = handlers->scene->removeRenderableNode(weakNode);
+    
+    if (success)
+    {
+        LOG (INFO) << "Node successfully removed from SceneHandler";
+        LOG (INFO) << "Scene now contains " << handlers->scene->getNodeCount() << " nodes";
+        
+        // Rebuild acceleration structures if still have geometry
+        if (handlers->scene->hasGeometry())
+        {
+            LOG (DBUG) << "Rebuilding acceleration structures...";
+            handlers->scene->buildAccelerationStructures();
+        }
+    }
+    else
+    {
+        LOG (DBUG) << "Node was not in SceneHandler";
+    }
+}
+
+void Renderer::removeRenderableNodeByID (ItemID nodeID)
+{
+    LOG (DBUG) << "Renderer::removeRenderableNodeByID: " << nodeID;
+
+    if (!initialized_ || !renderContext_)
+    {
+        LOG (WARNING) << "Renderer not initialized, cannot remove node";
+        return;
+    }
+
+    // Get the handlers from render context
+    dog::Handlers* handlers = renderContext_->getHandlers();
+    if (!handlers || !handlers->scene)
+    {
+        LOG (WARNING) << "SceneHandler not available";
+        return;
+    }
+
+    // Remove the node from the scene handler
+    bool success = handlers->scene->removeRenderableNodeByID(nodeID);
+    
+    if (success)
+    {
+        LOG (INFO) << "Node " << nodeID << " successfully removed from SceneHandler";
+        LOG (INFO) << "Scene now contains " << handlers->scene->getNodeCount() << " nodes";
+        
+        // Rebuild acceleration structures if still have geometry
+        if (handlers->scene->hasGeometry())
+        {
+            LOG (DBUG) << "Rebuilding acceleration structures...";
+            handlers->scene->buildAccelerationStructures();
+        }
+    }
+    else
+    {
+        LOG (DBUG) << "Node " << nodeID << " was not in SceneHandler";
+    }
 }

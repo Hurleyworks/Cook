@@ -29,8 +29,6 @@ public:
 
     void addSkyDomeHDR(const std::filesystem::path& hdrPath);
     void addRenderableNode(RenderableWeakRef& weakNode);
-    void removeRenderableNode(RenderableWeakRef& weakNode);
-    void removeRenderableNodeByID(ItemID nodeID);
 
 private:
     MessageService messengers;
