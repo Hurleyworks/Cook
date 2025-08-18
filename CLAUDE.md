@@ -134,3 +134,39 @@ Avoid building functionality on speculation. Implement features only when they a
 - **Include guards or `#pragma once`** in all header files
 - **Forward declarations** in headers when possible to reduce compilation dependencies
 - **Const-correctness** - mark methods and parameters const when they don't modify state
+
+
+## Module System
+
+### Module Dependency Chain
+```
+mace_core (base utilities, input handling)
+    ↓
+wabi_core (math) and oiio_core (image I/O) - parallel
+    ↓
+sabi_core (scene management, file I/O)
+    ↓
+properties_core (configuration system)
+    ↓
+qms_core (messaging system)
+    ↓
+dog_core (CUDA/OptiX rendering)
+```
+
+### Key Implications
+- **No standard headers needed**: mace_core includes all STL headers
+- **Upstream access**: Each module has access to all upstream module types
+- **Amalgamated pattern**: Each module's main .cpp includes all implementation files from `excludeFromBuild/`
+
+
+## Critical Reminders
+
+### Never Include These Headers
+- `#include "OptixUtil/optixu_on_cudau.h"`
+- `#include "CUDAUtil/cudau.h"`
+These headers are not part of this codebase and will cause compilation errors.
+
+### Build Workflow
+- **Build automatically after making changes** - by running "cmd /c b.bat`
+- **Build errors**: Check `E:\1Cook\Cook\build_errors.txt`
+- **Fix errors**: Read the error file and fix issues when requested
