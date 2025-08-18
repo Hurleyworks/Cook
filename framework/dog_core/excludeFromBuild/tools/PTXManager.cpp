@@ -1,6 +1,6 @@
 #include "PTXManager.h"
 #include "EmbeddedPTX.h"
-#include "../../../engine_core/generated/embedded_ptx.h"
+
 
 // Constructor initializes with render context
 PTXManager::PTXManager() :
