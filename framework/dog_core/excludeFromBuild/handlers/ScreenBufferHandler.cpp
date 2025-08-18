@@ -1,7 +1,7 @@
 #include "ScreenBufferHandler.h"
 #include "../RenderContext.h"
-#include <g3log/g3log.hpp>
-#include <random>
+#include "Handlers.h"  // To access PipelineHandler
+
 
 namespace dog
 {
@@ -51,6 +51,14 @@ bool ScreenBufferHandler::initialize(uint32_t width, uint32_t height)
             finalize();
             return false;
         }
+        
+        // Initialize copy kernels
+        if (!initializeCopyKernels())
+        {
+            LOG(WARNING) << "Failed to initialize copy kernels";
+            finalize();
+            return false;
+        }
 
         initialized_ = true;
         LOG(INFO) << "ScreenBufferHandler initialized successfully (" << width << "x" << height << ")";
@@ -71,6 +79,7 @@ void ScreenBufferHandler::finalize()
         return;
     }
 
+    finalizeCopyKernels();
     finalizeRngBuffer();
     linear_buffers_.finalize();
     accumulation_buffers_.finalize();
@@ -259,6 +268,54 @@ void ScreenBufferHandler::LinearBuffers::finalize()
     linearAlbedoBuffer.finalize();
     linearBeautyBuffer.finalize();
     LOG(DBUG) << "Linear buffers finalized";
+}
+
+bool ScreenBufferHandler::initializeCopyKernels()
+{
+    try
+    {
+        // Get PipelineHandler from RenderContext to access PTX loading
+        auto handlers = ctx_->getHandlers();
+        if (!handlers || !handlers->pipeline)
+        {
+            LOG(WARNING) << "PipelineHandler not available for PTX loading";
+            return false;
+        }
+        
+        // Load PTX data through PipelineHandler
+        std::vector<char> ptxData = handlers->pipeline->loadPTXData("copy_buffers");
+        
+        if (ptxData.empty())
+        {
+            LOG(WARNING) << "Failed to load PTX data for copy_buffers";
+            return false;
+        }
+        
+        // Load the module from PTX data
+        CUDADRV_CHECK(cuModuleLoadData(&module_copy_buffers_, ptxData.data()));
+        
+        // Create the copy to linear buffers kernel
+        kernel_copy_to_linear_buffers_ = cudau::Kernel(
+            module_copy_buffers_, "copyToLinearBuffers", cudau::dim3(8, 8), 0);
+        
+        LOG(INFO) << "Copy buffers kernel loaded successfully";
+        return true;
+    }
+    catch (const std::exception& ex)
+    {
+        LOG(WARNING) << "Failed to initialize copy kernels: " << ex.what();
+        return false;
+    }
+}
+
+void ScreenBufferHandler::finalizeCopyKernels()
+{
+    if (module_copy_buffers_)
+    {
+        CUDADRV_CHECK(cuModuleUnload(module_copy_buffers_));
+        module_copy_buffers_ = nullptr;
+    }
+    LOG(DBUG) << "Copy kernels finalized";
 }
 
 } // namespace dog

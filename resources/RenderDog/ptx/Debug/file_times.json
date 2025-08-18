@@ -1,0 +1,7 @@
+{
+    "E:\\1Cook\\Cook\\framework\\dog_core\\excludeFromBuild\\cuda\\compute_light_probs.cu": 134000189234162390,
+    "E:\\1Cook\\Cook\\framework\\dog_core\\excludeFromBuild\\cuda\\copy_buffers.cu": 134000171137047568,
+    "E:\\1Cook\\Cook\\framework\\dog_core\\excludeFromBuild\\cuda\\optix_gbuffer_kernels.cu": 134000184467257734,
+    "E:\\1Cook\\Cook\\framework\\dog_core\\excludeFromBuild\\cuda\\optix_pathtracing_kernels.cu": 134000191745888422,
+    "buildMode": "Debug"
+}

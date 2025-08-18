@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../dog_core.h"
+#include "../../generated/embedded_ptx.h" // Generated header
 
 // Simple wrapper around the generated embedded_ptx.h functionality
 // This class is primarily maintained for backward compatibility

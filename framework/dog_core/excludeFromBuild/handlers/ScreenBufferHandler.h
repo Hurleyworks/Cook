@@ -112,6 +112,9 @@ public:
     auto getBeautyAccumSurfaceObject() const { return accumulation_buffers_.beautyAccumBuffer.getSurfaceObject(0); }
     auto getAlbedoAccumSurfaceObject() const { return accumulation_buffers_.albedoAccumBuffer.getSurfaceObject(0); }
     auto getNormalAccumSurfaceObject() const { return accumulation_buffers_.normalAccumBuffer.getSurfaceObject(0); }
+    
+    // Post-processing kernel access
+    const cudau::Kernel& getCopyToLinearBuffersKernel() const { return kernel_copy_to_linear_buffers_; }
 
 private:
     RenderContextPtr ctx_ = nullptr;
@@ -160,11 +163,19 @@ private:
     AccumulationBuffers accumulation_buffers_;
     LinearBuffers linear_buffers_;
     cudau::Array rng_buffer_;  // Random number generator states
+    
+    // Copy buffers kernel management
+    CUmodule module_copy_buffers_ = nullptr;
+    cudau::Kernel kernel_copy_to_linear_buffers_;
 
     // Internal RNG buffer management
     bool initializeRngBuffer(uint32_t width, uint32_t height);
     void finalizeRngBuffer();
     void resizeRngBuffer(uint32_t width, uint32_t height);
+    
+    // Internal kernel management
+    bool initializeCopyKernels();
+    void finalizeCopyKernels();
 };
 
 } // namespace dog

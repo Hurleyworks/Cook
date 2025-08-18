@@ -1,7 +1,7 @@
 #include "Renderer.h"
-#include <g3log/g3log.hpp>
 #include "tools/PTXManager.h"
 #include "handlers/SceneHandler.h"
+#include "nvcc/CudaCompiler.h"
 
 Renderer::Renderer()
 {
@@ -25,6 +25,74 @@ void Renderer::init (MessageService messengers, const PropertyService& propertie
 void Renderer::initializeEngine (CameraHandle camera, ImageCacheHandlerPtr imageCache)
 {
     LOG (INFO) << "Renderer::initializeEngine - stub implementation";
+
+
+
+    std::filesystem::path resourceFolder = properties.renderProps->getVal<std::string>(RenderKey::ResourceFolder);
+    std::filesystem::path repoFolder = properties.renderProps->getVal<std::string>(RenderKey::RepoFolder);
+
+    // Check build configuration for CUDA kernel compilation strategy
+    bool softwareReleaseMode = properties.renderProps->getVal<bool>(RenderKey::SoftwareReleaseMode);
+    bool embeddedPTX = properties.renderProps->getVal<bool>(RenderKey::UseEmbeddedPTX);
+
+    // NB: Determine whether to compile CUDA kernels at runtime
+    // Development workflow:
+    // 1. Change compileCuda to true to force recompilation when CUDA source changes
+    // 2. Run application once to compile fresh PTX files
+    // 3. Run ptx_embed.bat to update generated/embedded_ptx.h with new binaries
+    // 4. Restore original condition and rebuild application
+    // 5. Application will then use the embedded PTX files
+
+    bool compileCuda = true;
+    std::string engineFilter = "all";  // Can be "all", "milo", or "shocker"
+
+    if (compileCuda)
+    {
+        CudaCompiler nvcc;
+
+        // Define the architectures to compile for
+        std::vector<std::string> targetArchitectures;
+
+        // Try to load from properties if available
+        try
+        {
+            std::string archList = properties.renderProps->getVal<std::string>(RenderKey::CudaTargetArchitectures);
+            if (!archList.empty())
+            {
+                // Parse comma-separated list of architectures
+                size_t pos = 0;
+                while ((pos = archList.find(',')) != std::string::npos)
+                {
+                    targetArchitectures.push_back(archList.substr(0, pos));
+                    archList.erase(0, pos + 1);
+                }
+                if (!archList.empty())
+                {
+                    targetArchitectures.push_back(archList);
+                }
+            }
+        }
+        catch (...)
+        {
+            // Property not found, using defaults
+        }
+
+        // If no architectures specified in properties, use defaults
+        if (targetArchitectures.empty())
+        {
+            targetArchitectures = { "sm_60", "sm_75", "sm_80", "sm_86", "sm_90" };
+        }
+
+        // Log which architectures we're compiling for
+        LOG(DBUG) << "Compiling CUDA kernels for the following architectures:";
+        for (const auto& arch : targetArchitectures)
+        {
+            LOG(DBUG) << "  - " << arch;
+        }
+
+        // Compile for all target architectures with engine filter
+        nvcc.compile(resourceFolder, repoFolder, targetArchitectures);
+    }
 
     // Create render context
     renderContext_ = RenderContext::create();

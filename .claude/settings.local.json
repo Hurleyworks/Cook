@@ -17,7 +17,8 @@
       "Bash(powershell.exe:*)",
       "Bash(cmd.exe /c b.bat)",
       "mcp__serena__replace_symbol_body",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   }

@@ -83,8 +83,8 @@ public:
 
     // Initialize pipelines with kernel names for PTX loading
     // Returns true if successful, false otherwise
-    bool initialize(const std::string& gbufferKernelName = "optix_dog_gbuffer",
-                   const std::string& pathTracingKernelName = "optix_dog_kernels");
+    bool initialize(const std::string& gbufferKernelName = "optix_gbuffer_kernels",
+                   const std::string& pathTracingKernelName = "optix_pathtracing_kernels");
 
     // Clean up all pipeline resources
     void finalize();

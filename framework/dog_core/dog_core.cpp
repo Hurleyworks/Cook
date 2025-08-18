@@ -27,6 +27,9 @@
 #include "excludeFromBuild/tools/GPUMemoryMonitor.cpp"
 #include "excludeFromBuild/tools/GPUTimerManager.cpp"
 
+// cuda compiler NVCC
+#include "excludeFromBuild/nvcc/CudaCompiler.cpp"
+
 // Additional includes will be added here as the framework is built out
 // For example:
 // #include "excludeFromBuild/handlers/Handlers.cpp"
