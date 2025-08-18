@@ -42,6 +42,11 @@ class RenderContext : public std::enable_shared_from_this<RenderContext>
     CUstream getCudaStream() const { return gpu_context_.getCudaStream(); }
     optixu::Context getOptixContext() const { return gpu_context_.getOptixContext(); }
     
+    // Stream chain management for multi-buffered rendering
+    CUstream getCurrentStream() const { return stream_chain_.waitAvailableAndGetCurrentStream(); }
+    void swapStreams() { stream_chain_.swap(); }
+    void waitAllStreamsComplete() const { stream_chain_.waitAllWorkDone(); }
+    
     // Device information
     int getComputeCapability() const { return gpu_context_.getComputeCapability(); }
     int getComputeCapabilityMajor() const { return gpu_context_.getComputeCapabilityMajor(); }
@@ -83,6 +88,9 @@ class RenderContext : public std::enable_shared_from_this<RenderContext>
     
     // Core GPU context
     GPUContext gpu_context_;
+    
+    // Stream chain for multi-buffered rendering (2 streams for double buffering)
+    StreamChain<2> stream_chain_;
     
     // OptiX scene
     optixu::Scene scene_;

@@ -81,6 +81,10 @@ void RenderContext::cleanup()
         LOG(DBUG) << "OptiX scene destroyed";
     }
     
+    // Finalize stream chain before destroying GPU context
+    stream_chain_.finalize();
+    LOG(DBUG) << "StreamChain finalized";
+    
     // Clean up GPU context
     gpu_context_.finalize();
     
@@ -96,6 +100,10 @@ bool RenderContext::initializeCore (int deviceIndex)
         LOG(WARNING) << "Failed to initialize GPU context for device " << deviceIndex;
         return false;
     }
+    
+    // Initialize stream chain for multi-buffered rendering
+    stream_chain_.initialize(gpu_context_.getCudaContext());
+    LOG(DBUG) << "StreamChain initialized with 2 streams for double buffering";
     
     // Set default resource path if not already set
     if (resource_path_.empty())

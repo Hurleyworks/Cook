@@ -124,6 +124,10 @@ void Renderer::finalize()
 
     if (renderContext_)
     {
+        // Wait for all GPU work to complete before cleanup
+        renderContext_->waitAllStreamsComplete();
+        LOG (DBUG) << "All streams synchronized for shutdown";
+        
         renderContext_->cleanup();
         renderContext_.reset();
     }
@@ -133,20 +137,48 @@ void Renderer::finalize()
 
 void Renderer::render (const InputEvent& input, bool updateMotion, uint32_t frameNumber)
 {
-    LOG (DBUG) << "Renderer::render - stub implementation (frame " << frameNumber << ")";
+    LOG (DBUG) << "Renderer::render - frame " << frameNumber;
 
-    // Stub implementation - would perform actual rendering here
-    if (!initialized_)
+    if (!initialized_ || !renderContext_)
     {
         LOG (WARNING) << "Renderer not initialized, cannot render";
         return;
     }
 
-    // In full implementation would:
-    // 1. Process input
-    // 2. Update motion if needed
-    // 3. Execute rendering pipeline
-    // 4. Handle frame synchronization
+    // Get current stream from the StreamChain (waits for previous frame if needed)
+    CUstream currentStream = renderContext_->getCurrentStream();
+    
+    // Determine buffer index for double buffering
+    uint32_t bufferIndex = frameNumber % 2;
+    
+    // Phase 1: Process input
+    // TODO: Update camera based on input events
+    
+    // Phase 2: Scene update (if motion is enabled)
+    if (updateMotion)
+    {
+        // TODO: Update animated objects
+        // TODO: Rebuild acceleration structures if needed
+        LOG (DBUG) << "  Updating motion for frame " << frameNumber;
+    }
+    
+    // Phase 3: Update pipeline parameters
+    // TODO: Update per-frame uniforms
+    // TODO: Set accumulation count
+    
+    // Phase 4: Rendering stages (all on current stream)
+    // TODO: G-buffer generation
+    // TODO: Path tracing kernel launch
+    // TODO: Post-processing
+    
+    LOG (DBUG) << "  Rendering on stream for buffer " << bufferIndex;
+    
+    // Phase 5: Frame finalization
+    // Swap streams for next frame (records end event on current stream)
+    renderContext_->swapStreams();
+    
+    // Note: No need to synchronize here - next frame will wait automatically
+    // Only synchronize when absolutely necessary (e.g., screenshots, shutdown)
 }
 
 void Renderer::addSkyDomeHDR (const std::filesystem::path& hdrPath)
