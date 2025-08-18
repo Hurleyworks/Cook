@@ -1,8 +1,53 @@
+// ModelHandler manages geometry and material resources for the Dog rendering system.
+// It provides centralized management of geometry caching, material allocation, and GAS building.
+//
+// Primary Responsibilities:
+// - Geometry cache management with reference counting
+// - Material slot allocation and tracking
+// - Geometry Acceleration Structure (GAS) building
+// - Vertex and triangle buffer management
+// - Emissive material detection
+//
+// Geometry Management:
+// - Hash-based geometry caching for reuse (flyweight pattern)
+// - Reference counting for shared geometry instances
+// - Automatic cleanup when geometry is no longer referenced
+// - Support for multi-surface models (CgModel)
+//
+// Material Management:
+// - Material slot allocation using SlotFinder
+// - Disney material data buffer management
+// - Per-surface material assignment
+// - Emissive material detection and flagging
+//
+// Resource Types:
+// - GeometryInstanceResources: Per-surface data (triangles, material slot)
+// - GeometryGroupResources: Complete geometry (GAS, vertices, surfaces)
+// - Material slots: Allocated per surface for material properties
+//
+// Memory Management:
+// - Automatic CUDA memory allocation and deallocation
+// - Reference counting for geometry sharing
+// - Proper resource cleanup in destructor
+// - RAII principles for resource safety
+//
+// Integration:
+// - Works with SceneHandler for instance management
+// - Creates OptiX Geometry Acceleration Structures
+// - Provides geometry resources for ray tracing
+// - Detects emissive surfaces for area lighting
+//
+// Usage:
+// - Create via factory method ModelHandler::create()
+// - Initialize through RenderContext
+// - Call createGeometryGroup() to build geometry from CgModel
+// - Use computeGeometryHash() for geometry identification
+// - Access cached geometry via getGeometry()
+// - Manage reference counts with increment/decrementRefCount()
+
 #pragma once
 
 #include "../DogShared.h"
-#include <memory>
-#include <unordered_map>
 
 // Forward declarations (outside namespace)
 class RenderContext;

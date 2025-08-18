@@ -6,12 +6,17 @@
 // - Handles accumulation buffers for progressive rendering
 // - Controls linear buffers for denoising pipeline
 // - Manages RNG buffer for Monte Carlo sampling
+// - Loads and manages copy_buffers kernel for post-processing
 //
 // Buffer Types:
 // - G-buffers: Store per-pixel geometry and material properties (2 sets for double buffering)
 // - Accumulation buffers: Accumulate beauty, albedo, and normal passes over multiple samples
 // - Linear buffers: Store linearized data for denoising and post-processing
 // - RNG buffer: Stores per-pixel random number generator states
+//
+// Kernel Management:
+// - copyToLinearBuffers: Converts accumulated buffers to linear format for denoising
+// - Loads PTX through PipelineHandler for proper abstraction
 //
 // Memory Management:
 // - Automatic CUDA memory allocation and deallocation
@@ -24,17 +29,14 @@
 // - Provides surface objects for kernel access
 // - Supports denoising workflow
 // - Integrates with CUDA runtime
+// - Uses PipelineHandler for PTX loading
 //
 // Usage:
 // - Create via factory method ScreenBufferHandler::create()
 // - Initialize with GPU context and dimensions
 // - Access buffers through getter methods
 // - Resize buffers when window dimensions change
-//
-// Thread Safety:
-// - Not thread-safe by default
-// - Requires external synchronization for multi-threaded access
-// - Buffer operations should be synchronized with rendering
+// - Call getCopyToLinearBuffersKernel() for post-processing
 
 #pragma once
 

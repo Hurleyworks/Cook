@@ -31,10 +31,7 @@
 // - Supports material system requirements
 // - Handles different texture types (color, normal maps, etc.)
 //
-// Thread Safety:
-// - Not thread-safe by default
-// - Requires external synchronization for multi-threaded access
-// - Cache access should be synchronized across threads
+
 //
 // Usage:
 // - Create via factory method TextureHandler::create()

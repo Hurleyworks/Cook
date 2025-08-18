@@ -1,40 +1,42 @@
 // SceneHandler manages the scene graph and acceleration structures for the Dog rendering system.
-// It provides centralized management of geometry, transforms, and OptiX traversable handles.
+// It provides centralized management of instances, transforms, and OptiX traversable handles.
 //
-// Resource Management:
-// - Manages scene graph hierarchy
-// - Handles OptiX acceleration structures (IAS/GAS)
-// - Controls instance transforms and visibility
-// - Manages traversable handles for ray tracing
+// Primary Responsibilities:
+// - Instance management and transforms
+// - OptiX Instance Acceleration Structure (IAS) building
+// - Scene traversable handle management
+// - Light distribution for emissive instances
+//
+// Delegation to ModelHandler:
+// - Geometry creation and caching
+// - Material slot allocation
+// - Geometry Acceleration Structure (GAS) management
+// - Emissive material detection
 //
 // Scene Components:
 // - Instance data: Per-instance transforms and properties
-// - Geometry data: References to model geometry
-// - Material bindings: Links instances to materials
-// - Acceleration structures: OptiX BVH structures
+// - Geometry references: Cached in ModelHandler
+// - Light distribution: For importance sampling emissive geometry
+// - Acceleration structures: OptiX IAS for ray traversal
 //
 // Memory Management:
 // - Automatic CUDA memory allocation and deallocation
 // - Proper resource cleanup in destructor
 // - Support for dynamic scene updates
-// - RAII principles for resource safety
+// - Reference counting for shared geometry (via ModelHandler)
 //
 // Integration:
 // - Works with OptiX ray tracing pipeline
 // - Provides traversable handles for kernel access
+// - Delegates geometry management to ModelHandler
 // - Supports dynamic scene updates
-// - Integrates with CUDA runtime
 //
 // Usage:
 // - Create via factory method SceneHandler::create()
-// - Initialize with GPU context
+// - Initialize through RenderContext
+// - Add/remove RenderableNodes dynamically
 // - Build acceleration structures after scene changes
 // - Access traversable handle for ray tracing
-//
-// Thread Safety:
-// - Not thread-safe by default
-// - Requires external synchronization for multi-threaded access
-// - Scene updates should be synchronized with rendering
 
 #pragma once
 

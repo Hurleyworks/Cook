@@ -1,7 +1,6 @@
 #include "SceneHandler.h"
 #include "../RenderContext.h"
 #include "Handlers.h"  // For accessing ModelHandler through Handlers struct
-#include <g3log/g3log.hpp>
 
 namespace dog
 {
