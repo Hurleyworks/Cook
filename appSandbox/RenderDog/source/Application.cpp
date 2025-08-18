@@ -110,7 +110,7 @@ class Application : public Jahley::App
         std::string phone = "E:/common_content/models/korean_public_payphone_01_4k/korean_public_payphone_01_4k.gltf";
         std::string train = "E:/common_content/models/steam_train/scene.gltf";
         std::string warrior = "E:/common_content/models/warrior_toy/scene.gltf";
-        std::string trooper = "E:/costrmmon_content/models/StormTrooper/scene.gltf";
+        std::string trooper = "E:/common_content/models/StormTrooper/scene.gltf";
         std::string vase = "E:/common_content/models/antique_ceramic_vase_01_4k/antique_ceramic_vase_01_4k.gltf";
         std::string box = "E:/common_content/models/Box/glTF/Box.gltf";
         std::string bball = "C:/common_content/models/baseball_01_4k/baseball_01_4k.gltf";
@@ -128,7 +128,7 @@ class Application : public Jahley::App
  //  model.loadGLTF (box);
     // model.loadGLTF (scifi);
        // model.loadGLTF (warrior);
-     model.loadGLTF (flight);
+    // model.loadGLTF (box);
         std::vector<std::string> models;
         // models.push_back (testModel);
         // models.push_back (helmet);
@@ -155,7 +155,7 @@ class Application : public Jahley::App
          warmLight->setClientID (warmLight->getID());
          sabi::SpaceTime& st = warmLight->getSpaceTime();
          st.worldTransform.translation() = Eigen::Vector3f (0.0f, 1.0f, -4.0f);
-      //  model.addNodeToRenderer (warmLight);
+         model.addNodeToRenderer (warmLight);
 
          {
          groundPlane = sabi::MeshOps::createGroundPlaneNode();

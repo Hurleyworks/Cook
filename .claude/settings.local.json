@@ -15,7 +15,8 @@
       "Bash(./b.bat)",
       "Bash(pwsh:*)",
       "Bash(powershell.exe:*)",
-      "Bash(cmd.exe /c b.bat)"
+      "Bash(cmd.exe /c b.bat)",
+      "mcp__serena__replace_symbol_body"
     ],
     "deny": []
   }

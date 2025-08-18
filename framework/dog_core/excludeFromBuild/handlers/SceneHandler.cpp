@@ -287,9 +287,29 @@ bool SceneHandler::addRenderableNode(RenderableWeakRef weakNode)
         return false;
     }
 
+    // Check if any surface has emissive material
+    bool hasEmissiveMaterial = false;
+    std::vector<uint32_t> emissiveSurfaceIndices;
+    
+    for (size_t i = 0; i < cgModel->S.size(); ++i)
+    {
+        const auto& surface = cgModel->S[i];
+        const auto& material = surface.cgMaterial;
+        
+        // Check if material has emission properties
+        if (material.emission.luminous > 0.0f)
+        {
+            hasEmissiveMaterial = true;
+            emissiveSurfaceIndices.push_back(static_cast<uint32_t>(i));
+            LOG(DBUG) << "Found emissive surface " << i << " with luminous intensity: " 
+                      << material.emission.luminous;
+        }
+    }
+
     // Create resource tracking for this node
     NodeResources resources;
     resources.node = weakNode;
+    resources.is_emissive = hasEmissiveMaterial;
     
     // Allocate instance slot
     resources.instance_slot = inst_slot_finder_.getFirstAvailableSlot();
@@ -362,7 +382,8 @@ bool SceneHandler::addRenderableNode(RenderableWeakRef weakNode)
     ias_needs_rebuild_ = true;
     has_geometry_ = true;
 
-    LOG(INFO) << "Added RenderableNode " << nodeID << " to scene (slot " << resources.instance_slot << ")";
+    LOG(INFO) << "Added RenderableNode " << nodeID << " to scene (slot " << resources.instance_slot 
+              << ", emissive: " << (resources.is_emissive ? "yes" : "no") << ")";
     LOG(DBUG) << "Scene now contains " << node_resources_.size() << " nodes";
     
     return true;
@@ -779,6 +800,22 @@ bool SceneHandler::createNodeInstance(NodeResources& nodeRes, const GeometryGrou
             geomInstData.materialSlot = firstGeomInst.material_slot;
             geomInstData.geomInstSlot = nodeRes.geom_inst_slot;
             
+            // Initialize light distribution for emissive geometry instances
+            if (nodeRes.is_emissive)
+            {
+                // For now, we'll set up a uniform distribution for all triangles
+                // In the future, this could be importance-sampled based on area and emittance
+                uint32_t numTriangles = firstGeomInst.triangle_buffer.numElements();
+                if (numTriangles > 0)
+                {
+                    // Initialize uniform distribution for triangles in this geometry instance
+                    // The actual distribution setup would need CUDA context and proper initialization
+                    // For now, we just mark it as having emissive primitives
+                    LOG(DBUG) << "Geometry instance " << nodeRes.geom_inst_slot 
+                              << " has " << numTriangles << " emissive triangles";
+                }
+            }
+            
             // Unmap the buffer
             geom_inst_data_buffer_.unmap();
         }
@@ -801,6 +838,21 @@ bool SceneHandler::createNodeInstance(NodeResources& nodeRes, const GeometryGrou
         // In future, could support multiple geom instances per instance
         instData.isEmissive = nodeRes.is_emissive ? 1 : 0;
         instData.emissiveScale = 1.0f;
+        
+        // Set up light distribution for emissive instances
+        if (nodeRes.is_emissive)
+        {
+            // Store geometry instance slots that have emissive surfaces
+            // For now, we assume a single geometry instance per instance node
+            // The actual distribution initialization would need proper CUDA setup
+            // This marks the instance as a light source for sampling
+            LOG(DBUG) << "Instance " << nodeRes.instance_slot << " marked as emissive light source";
+            
+            // In a complete implementation, we would:
+            // 1. Create a buffer of geomInstSlots for this instance
+            // 2. Initialize instData.lightGeomInstDist with proper weights
+            // 3. Set up importance sampling based on surface area and emittance
+        }
         
         inst_data_buffer_[0].unmap();
         
