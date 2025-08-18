@@ -31,8 +31,8 @@ void Renderer::initializeEngine (CameraHandle camera, ImageCacheHandlerPtr image
     {
         renderContext_->setCamera (camera);
 
-        // Initialize with default device 0
-        if (renderContext_->initialize (0))
+        // Initialize with default device 0 and pass the image cache
+        if (renderContext_->initialize (0, imageCache))
         {
             initialized_ = true;
             LOG (INFO) << "Renderer initialized with RenderContext";

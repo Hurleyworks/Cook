@@ -17,6 +17,8 @@
 #include "excludeFromBuild/handlers/PipelineParameterHandler.cpp"
 #include "excludeFromBuild/handlers/DenoiserHandler.cpp"
 #include "excludeFromBuild/handlers/SceneHandler.cpp"
+#include "excludeFromBuild/handlers/TextureHandler.cpp"
+#include "excludeFromBuild/handlers/EnvironmentHandler.cpp"
 
 // Tools implementations
 #include "excludeFromBuild/tools/PTXManager.cpp"

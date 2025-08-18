@@ -7,7 +7,7 @@ RenderContext::~RenderContext()
     cleanup();
 }
 
-bool RenderContext::initialize (int deviceIndex)
+bool RenderContext::initialize (int deviceIndex, ImageCacheHandlerPtr imageCache)
 {
     if (initialized_)
     {
@@ -16,6 +16,9 @@ bool RenderContext::initialize (int deviceIndex)
     }
     
     LOG(INFO) << "Initializing RenderContext...";
+    
+    // Store the image cache
+    imageCache_ = imageCache;
     
     // Update render dimensions from camera if available
     updateRenderDimensionsFromCamera();

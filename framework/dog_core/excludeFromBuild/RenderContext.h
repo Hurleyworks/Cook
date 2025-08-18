@@ -7,6 +7,7 @@
 
 // Forward declarations
 using RenderContextPtr = std::shared_ptr<class RenderContext>;
+using ImageCacheHandlerPtr = std::shared_ptr<class ImageCacheHandler>;
 
 // Central coordination class for the dog_core rendering system
 // Manages GPU contexts, handlers, and shared resources
@@ -23,8 +24,8 @@ class RenderContext : public std::enable_shared_from_this<RenderContext>
     RenderContext() = default;
     ~RenderContext();
 
-    // Initialize the render context with optional device selection
-    bool initialize (int deviceIndex = 0);
+    // Initialize the render context with optional device selection and image cache
+    bool initialize (int deviceIndex = 0, ImageCacheHandlerPtr imageCache = nullptr);
     
     // Clean up all resources
     void cleanup();
@@ -67,6 +68,10 @@ class RenderContext : public std::enable_shared_from_this<RenderContext>
     void setCamera (sabi::CameraHandle camera) { camera_ = camera; }
     sabi::CameraHandle getCamera() const { return camera_; }
     
+    // Image cache access
+    ImageCacheHandlerPtr getImageCache() const { return imageCache_; }
+    void setImageCache(ImageCacheHandlerPtr imageCache) { imageCache_ = imageCache; }
+    
     // Check and update render dimensions from camera (call per frame or when needed)
     bool updateRenderDimensionsFromCamera();
 
@@ -94,6 +99,9 @@ class RenderContext : public std::enable_shared_from_this<RenderContext>
     
     // Camera (stub for now)
     sabi::CameraHandle camera_ = nullptr;
+    
+    // Image cache for texture loading
+    ImageCacheHandlerPtr imageCache_ = nullptr;
     
     // Helper methods
     bool initializeCore (int deviceIndex);
