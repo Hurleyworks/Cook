@@ -3,6 +3,98 @@
 #include "handlers/SceneHandler.h"
 #include "nvcc/CudaCompiler.h"
 
+OIIO::ImageBuf createSkyWithSun (int width, int height,
+                                 float sunAltitude = 0.4f,   // 0.0 = horizon, 1.0 = zenith
+                                 float sunAzimuth = 0.5f,    // 0.0-1.0 maps to 0-360 degrees
+                                 float sunSize = 0.01f,      // relative size of sun disk
+                                 float sunIntensity = 50.0f) // HDR intensity of sun center
+{
+    // Create an ImageSpec with 3 channels (RGB) and float type for HDR
+    OIIO::ImageSpec spec (width, height, 3, OIIO::TypeDesc::FLOAT);
+
+    // Create the ImageBuf with that specification
+    OIIO::ImageBuf buf (spec);
+
+    // Sky colors - more realistic values
+    float zenith_color[3] = {0.3f, 0.5f, 0.9f};  // Blue sky at zenith
+    float horizon_color[3] = {0.7f, 0.8f, 1.0f}; // Brighter blue at horizon
+
+    // Sun colors
+    float sun_color[3] = {1.0f, 1.0f, 0.9f};      // Slightly yellow sun
+    float sun_glow_color[3] = {1.0f, 0.9f, 0.7f}; // Warmer glow around sun
+
+    // Calculate sun position in image space
+    float sun_x = width * sunAzimuth;
+    float sun_y = height * (1.0f - sunAltitude); // Invert Y to match altitude
+    float sun_radius = std::min (width, height) * sunSize;
+
+    // Calculate atmosphere thickness at horizon
+    const float rayleigh_strength = 2.5f;
+
+    // Process each pixel
+    for (int y = 0; y < height; ++y)
+    {
+        // Vertical position factor (0 at horizon, 1 at zenith)
+        float altitude = static_cast<float> (height - y - 1) / (height - 1);
+        float thickness = 1.0f / (std::max (0.05f, altitude) * 0.5f + 0.5f);
+
+        for (int x = 0; x < width; ++x)
+        {
+            // Base sky color - gradient from horizon to zenith
+            float pixel_color[3];
+            for (int c = 0; c < 3; ++c)
+            {
+                pixel_color[c] = horizon_color[c] * (1.0f - altitude) +
+                                 zenith_color[c] * altitude;
+            }
+
+            // Atmospheric scattering (more reddish at horizon)
+            float scatter = std::pow (1.0f - altitude, rayleigh_strength);
+            pixel_color[0] = std::min (1.0f, pixel_color[0] + scatter * 0.2f);
+            pixel_color[1] = std::min (1.0f, pixel_color[1] + scatter * 0.05f);
+            pixel_color[2] = std::max (0.1f, pixel_color[2] - scatter * 0.2f);
+
+            // Distance to sun (for drawing sun disk and glow)
+            float dx = x - sun_x;
+            float dy = y - sun_y;
+            float dist_to_sun = std::sqrt (dx * dx + dy * dy);
+
+            // Add sun disk
+            if (dist_to_sun < sun_radius)
+            {
+                // Smooth edge for the sun
+                float sun_factor = 1.0f - (dist_to_sun / sun_radius);
+                sun_factor = std::pow (sun_factor, 0.5f); // Soften edge
+
+                // Apply sun color and intensity (HDR value > 1.0)
+                for (int c = 0; c < 3; ++c)
+                {
+                    pixel_color[c] = pixel_color[c] * (1.0f - sun_factor) +
+                                     sun_color[c] * sun_factor * sunIntensity;
+                }
+            }
+            // Add sun glow/halo
+            else if (dist_to_sun < sun_radius * 10.0f)
+            {
+                float glow_factor = 1.0f - (dist_to_sun / (sun_radius * 10.0f));
+                glow_factor = std::pow (glow_factor, 2.0f); // Squared for more natural falloff
+
+                // Apply glow with softer intensity
+                float glow_intensity = sunIntensity * 0.1f * glow_factor;
+                for (int c = 0; c < 3; ++c)
+                {
+                    pixel_color[c] = pixel_color[c] + sun_glow_color[c] * glow_intensity;
+                }
+            }
+
+            // Set pixel value
+            buf.setpixel (x, y, pixel_color);
+        }
+    }
+
+    return buf;
+}
+
 Renderer::Renderer()
 {
     LOG (DBUG) << "Renderer constructor";
@@ -26,14 +118,12 @@ void Renderer::initializeEngine (CameraHandle camera, ImageCacheHandlerPtr image
 {
     LOG (INFO) << "Renderer::initializeEngine - stub implementation";
 
-
-
-    std::filesystem::path resourceFolder = properties.renderProps->getVal<std::string>(RenderKey::ResourceFolder);
-    std::filesystem::path repoFolder = properties.renderProps->getVal<std::string>(RenderKey::RepoFolder);
+    std::filesystem::path resourceFolder = properties.renderProps->getVal<std::string> (RenderKey::ResourceFolder);
+    std::filesystem::path repoFolder = properties.renderProps->getVal<std::string> (RenderKey::RepoFolder);
 
     // Check build configuration for CUDA kernel compilation strategy
-    bool softwareReleaseMode = properties.renderProps->getVal<bool>(RenderKey::SoftwareReleaseMode);
-    bool embeddedPTX = properties.renderProps->getVal<bool>(RenderKey::UseEmbeddedPTX);
+    bool softwareReleaseMode = properties.renderProps->getVal<bool> (RenderKey::SoftwareReleaseMode);
+    bool embeddedPTX = properties.renderProps->getVal<bool> (RenderKey::UseEmbeddedPTX);
 
     // NB: Determine whether to compile CUDA kernels at runtime
     // Development workflow:
@@ -44,7 +134,7 @@ void Renderer::initializeEngine (CameraHandle camera, ImageCacheHandlerPtr image
     // 5. Application will then use the embedded PTX files
 
     bool compileCuda = true;
-    std::string engineFilter = "all";  // Can be "all", "milo", or "shocker"
+    std::string engineFilter = "all"; // Can be "all", "milo", or "shocker"
 
     if (compileCuda)
     {
@@ -56,19 +146,19 @@ void Renderer::initializeEngine (CameraHandle camera, ImageCacheHandlerPtr image
         // Try to load from properties if available
         try
         {
-            std::string archList = properties.renderProps->getVal<std::string>(RenderKey::CudaTargetArchitectures);
+            std::string archList = properties.renderProps->getVal<std::string> (RenderKey::CudaTargetArchitectures);
             if (!archList.empty())
             {
                 // Parse comma-separated list of architectures
                 size_t pos = 0;
-                while ((pos = archList.find(',')) != std::string::npos)
+                while ((pos = archList.find (',')) != std::string::npos)
                 {
-                    targetArchitectures.push_back(archList.substr(0, pos));
-                    archList.erase(0, pos + 1);
+                    targetArchitectures.push_back (archList.substr (0, pos));
+                    archList.erase (0, pos + 1);
                 }
                 if (!archList.empty())
                 {
-                    targetArchitectures.push_back(archList);
+                    targetArchitectures.push_back (archList);
                 }
             }
         }
@@ -80,18 +170,18 @@ void Renderer::initializeEngine (CameraHandle camera, ImageCacheHandlerPtr image
         // If no architectures specified in properties, use defaults
         if (targetArchitectures.empty())
         {
-            targetArchitectures = { "sm_60", "sm_75", "sm_80", "sm_86", "sm_90" };
+            targetArchitectures = {"sm_60", "sm_75", "sm_80", "sm_86", "sm_90"};
         }
 
         // Log which architectures we're compiling for
-        LOG(DBUG) << "Compiling CUDA kernels for the following architectures:";
+        LOG (DBUG) << "Compiling CUDA kernels for the following architectures:";
         for (const auto& arch : targetArchitectures)
         {
-            LOG(DBUG) << "  - " << arch;
+            LOG (DBUG) << "  - " << arch;
         }
 
         // Compile for all target architectures with engine filter
-        nvcc.compile(resourceFolder, repoFolder, targetArchitectures);
+        nvcc.compile (resourceFolder, repoFolder, targetArchitectures);
     }
 
     // Create render context
@@ -127,7 +217,7 @@ void Renderer::finalize()
         // Wait for all GPU work to complete before cleanup
         renderContext_->waitAllStreamsComplete();
         LOG (DBUG) << "All streams synchronized for shutdown";
-        
+
         renderContext_->cleanup();
         renderContext_.reset();
     }
@@ -147,13 +237,13 @@ void Renderer::render (const InputEvent& input, bool updateMotion, uint32_t fram
 
     // Get current stream from the StreamChain (waits for previous frame if needed)
     CUstream currentStream = renderContext_->getCurrentStream();
-    
+
     // Determine buffer index for double buffering
     uint32_t bufferIndex = frameNumber % 2;
-    
+
     // Phase 1: Process input and update camera
-    updateCameraBody(input);
-    
+    updateCameraBody (input);
+
     // Check if we need to restart accumulation due to camera changes
     if (cameraChanged_ || restartAccumulation_)
     {
@@ -166,51 +256,115 @@ void Renderer::render (const InputEvent& input, bool updateMotion, uint32_t fram
     {
         accumulationFrame_++;
     }
-    
+
     // Phase 2: Scene update (if motion is enabled)
     if (updateMotion)
     {
         // Reset accumulation when scene is animating
         accumulationFrame_ = 0;
-        
+
         // TODO: Update animated objects
         // TODO: Rebuild acceleration structures if needed
         LOG (DBUG) << "  Updating motion for frame " << frameNumber;
     }
-    
-    // Phase 3: Update pipeline parameters
-    // TODO: Update per-frame uniforms with camera data
-    // TODO: Set accumulation count
-    // Example of what will be done:
-    // per_frame_params.camera = currentCamera_;
-    // per_frame_params.prevCamera = previousCamera_;
-    // per_frame_params.accumFrame = accumulationFrame_;
-    // per_frame_params.bufferIndex = bufferIndex;
-    
-    // Phase 4: Rendering stages (all on current stream)
-    // TODO: G-buffer generation
-    // TODO: Path tracing kernel launch
-    // TODO: Post-processing
-    
-    LOG (DBUG) << "  Rendering on stream for buffer " << bufferIndex 
-               << ", accumulation frame " << accumulationFrame_;
-    
-    // Phase 5: Update camera sensor (if applicable, e.g., LightWave integration)
+
+    // Get handlers
+    auto* handlers = renderContext_->getHandlers();
+
+    // Build per-frame parameters using DogShared structures
+    DogShared::PerFramePipelineLaunchParameters frameParams = {};
+    frameParams.travHandle = handlers->scene->getTraversableHandle();
+    frameParams.numAccumFrames = accumulationFrame_;
+    frameParams.frameIndex = frameNumber;
+    frameParams.camera = currentCamera_;
+    frameParams.prevCamera = previousCamera_;
+    frameParams.bufferIndex = bufferIndex;
+    frameParams.maxPathLength = 8; // Get from properties later
+    frameParams.enableJittering = true;
+    frameParams.resetFlowBuffer = (accumulationFrame_ == 0);
+
+    // Update parameters
+    handlers->pipelineParameter->updatePerFrameParameters (frameParams);
+    handlers->pipelineParameter->copyParametersToDevice (currentStream);
+
+    // Get device pointer for pipeline launches
+    CUdeviceptr plpDevice = handlers->pipelineParameter->getCombinedParametersDevice();
+
+    // Launch G-buffer pass
+    handlers->pipeline->launchGBufferPipeline (currentStream, plpDevice,
+                                               renderContext_->getRenderWidth(),
+                                               renderContext_->getRenderHeight());
+
+    // Launch path tracing
+    handlers->pipeline->launchPathTracingPipeline (currentStream, plpDevice,
+                                                   renderContext_->getRenderWidth(),
+                                                   renderContext_->getRenderHeight());
+
+    // Copy to linear buffers for denoising
+    auto& copyKernel = handlers->screenBuffer->getCopyToLinearBuffersKernel();
+    copyKernel.launchWithThreadDim (
+        currentStream,
+        cudau::dim3 (renderContext_->getRenderWidth(), renderContext_->getRenderHeight()),
+        handlers->screenBuffer->getLinearBeautyBuffer(),
+        handlers->screenBuffer->getLinearAlbedoBuffer(),
+        handlers->screenBuffer->getLinearNormalBuffer(),
+        handlers->screenBuffer->getLinearFlowBuffer());
+
+    // Store camera for next frame
+    previousCamera_ = currentCamera_;
+
     updateCameraSensor();
-    
-    // Phase 6: Frame finalization
-    // Swap streams for next frame (records end event on current stream)
+
     renderContext_->swapStreams();
-    
-    // Note: No need to synchronize here - next frame will wait automatically
-    // Only synchronize when absolutely necessary (e.g., screenshots, shutdown)
 }
 
 void Renderer::addSkyDomeHDR (const std::filesystem::path& hdrPath)
 {
-    LOG (INFO) << "Renderer::addSkyDomeHDR - stub implementation: " << hdrPath.string();
+    LOG (DBUG) << _FN_ << "   " << hdrPath.generic_string();
 
-    // Stub implementation - would load HDR and set up sky dome lighting
+    if (!renderContext_)
+    {
+        LOG (WARNING) << "Render context not initialized";
+        return;
+    }
+
+    if (!std::filesystem::exists (hdrPath))
+    {
+        LOG (WARNING) << "Environment HDR file not found: " << hdrPath.generic_string();
+
+        OIIO::ImageBuf sky = createSkyWithSun (2048, 1024);
+
+        return;
+    }
+
+    try
+    {
+        OIIO::ImageBuf image (hdrPath.generic_string());
+
+        if (!image.has_error())
+        {
+            // Get the SkyDomeHandler from the render context
+            auto* handlers = renderContext_->getHandlers();
+            if (handlers->environment)
+            {
+                // Add the sky dome image to the handler
+                handlers->environment->addSkyDomeImage (std::move (image));
+                LOG (INFO) << "Successfully loaded sky dome HDR: " << hdrPath.generic_string();
+            }
+            else
+            {
+                LOG (WARNING) << "SkyDomeHandler not initialized";
+            }
+        }
+        else
+        {
+            LOG (WARNING) << "Failed to load HDR image: " << image.geterror();
+        }
+    }
+    catch (const std::exception& e)
+    {
+        LOG (WARNING) << "Exception loading HDR file: " << e.what();
+    }
 }
 
 void Renderer::addRenderableNode (RenderableWeakRef& weakNode)
@@ -235,7 +389,7 @@ void Renderer::addRenderableNode (RenderableWeakRef& weakNode)
     if (RenderableNode node = weakNode.lock())
     {
         LOG (INFO) << "Adding RenderableNode: " << node->getName() << " (ID: " << node->getID() << ")";
-        
+
         // Check if node has valid geometry
         CgModelPtr cgModel = node->getModel();
         if (cgModel)
@@ -249,13 +403,13 @@ void Renderer::addRenderableNode (RenderableWeakRef& weakNode)
     }
 
     // Add the node to the scene handler
-    bool success = handlers->scene->addRenderableNode(weakNode);
-    
+    bool success = handlers->scene->addRenderableNode (weakNode);
+
     if (success)
     {
         LOG (INFO) << "Node successfully added to SceneHandler";
         LOG (INFO) << "Scene now contains " << handlers->scene->getNodeCount() << " nodes";
-        
+
         // Rebuild acceleration structures if needed
         if (handlers->scene->hasGeometry())
         {
@@ -294,13 +448,13 @@ void Renderer::removeRenderableNode (RenderableWeakRef& weakNode)
     }
 
     // Remove the node from the scene handler
-    bool success = handlers->scene->removeRenderableNode(weakNode);
-    
+    bool success = handlers->scene->removeRenderableNode (weakNode);
+
     if (success)
     {
         LOG (INFO) << "Node successfully removed from SceneHandler";
         LOG (INFO) << "Scene now contains " << handlers->scene->getNodeCount() << " nodes";
-        
+
         // Rebuild acceleration structures if still have geometry
         if (handlers->scene->hasGeometry())
         {
@@ -333,13 +487,13 @@ void Renderer::removeRenderableNodeByID (ItemID nodeID)
     }
 
     // Remove the node from the scene handler
-    bool success = handlers->scene->removeRenderableNodeByID(nodeID);
-    
+    bool success = handlers->scene->removeRenderableNodeByID (nodeID);
+
     if (success)
     {
         LOG (INFO) << "Node " << nodeID << " successfully removed from SceneHandler";
         LOG (INFO) << "Scene now contains " << handlers->scene->getNodeCount() << " nodes";
-        
+
         // Rebuild acceleration structures if still have geometry
         if (handlers->scene->hasGeometry())
         {
@@ -427,10 +581,10 @@ void Renderer::updateCameraBody (const InputEvent& input)
 
         // Mark camera as not dirty after processing
         camera->setDirty (false);
-        
-        LOG (DBUG) << "Camera updated - position: (" 
-                   << currentCamera_.position.x << ", " 
-                   << currentCamera_.position.y << ", " 
+
+        LOG (DBUG) << "Camera updated - position: ("
+                   << currentCamera_.position.x << ", "
+                   << currentCamera_.position.y << ", "
                    << currentCamera_.position.z << ")";
     }
 }
@@ -455,7 +609,7 @@ void Renderer::updateCameraSensor()
     // For now this is a stub that will be filled in when we have:
     // 1. Linear beauty buffer from rendering
     // 2. Render handler with buffer management
-    
+
     // Placeholder for future implementation:
     /*
     // Get the linear beauty buffer from render handler
@@ -466,7 +620,7 @@ void Renderer::updateCameraSensor()
     }
 
     auto& linearBeautyBuffer = renderHandler_->getLinearBeautyBuffer();
-    
+
     // Copy device buffer to host
     int renderWidth = renderContext_->getRenderWidth();
     int renderHeight = renderContext_->getRenderHeight();

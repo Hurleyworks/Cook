@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OptiX Utility Scene Documentation</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #764ba2;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #667eea;
+            margin-top: 30px;
+            margin-bottom: 20px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+        pre {
+            margin: 0;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .important {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .section {
+            margin-bottom: 40px;
+        }
+        .lifecycle-diagram {
+            background: #f0f4ff;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .step {
+            background: white;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #764ba2;
+        }
+        .method-signature {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            margin: 10px 0;
+        }
+        .keyword { color: #c678dd; }
+        .type { color: #61afef; }
+        .function { color: #e06c75; }
+        .variable { color: #d19a66; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #f8f9fa;
+            color: #667eea;
+            font-weight: bold;
+        }
+        .toc {
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .toc h3 {
+            margin-top: 0;
+            color: #764ba2;
+        }
+        .toc ul {
+            list-style-type: none;
+            padding-left: 20px;
+        }
+        .toc a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 OptiX Utility Scene (optixu::Scene) Documentation</h1>
+        
+        <div class="toc">
+            <h3>📋 Table of Contents</h3>
+            <ul>
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#what-is-scene">What is optixu::Scene?</a></li>
+                <li><a href="#what-it-does">What Does Scene Do?</a></li>
+                <li><a href="#lifecycle">Scene Lifecycle</a></li>
+                <li><a href="#when-to-call">When to Call setScene()</a></li>
+                <li><a href="#usage-patterns">Common Usage Patterns</a></li>
+                <li><a href="#best-practices">Best Practices</a></li>
+                <li><a href="#examples">Code Examples</a></li>
+            </ul>
+        </div>
+
+        <div class="section" id="overview">
+            <h2>📖 Overview</h2>
+            <p>The <code>optixu::Scene</code> class is a fundamental component in the OptiX Utility library that manages the scene graph for ray tracing. It serves as the container for all geometry and instance data that will be traversed during ray tracing operations.</p>
+        </div>
+
+        <div class="section" id="what-is-scene">
+            <h2>🎯 What is optixu::Scene?</h2>
+            <p><code>optixu::Scene</code> is a high-level abstraction that:</p>
+            <ul>
+                <li>Represents the complete scene graph for ray tracing</li>
+                <li>Manages the top-level acceleration structure (AS)</li>
+                <li>Handles the traversable handle for OptiX ray traversal</li>
+                <li>Coordinates between geometry acceleration structures (GAS) and instance acceleration structures (IAS)</li>
+            </ul>
+            
+            <div class="info-box">
+                <strong>Key Concept:</strong> The Scene object encapsulates all geometric data and their spatial relationships that OptiX needs to efficiently trace rays through your 3D environment.
+            </div>
+        </div>
+
+        <div class="section" id="what-it-does">
+            <h2>⚙️ What Does Scene Do?</h2>
+            
+            <h3>Primary Responsibilities:</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Responsibility</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Traversable Management</strong></td>
+                        <td>Provides the OptiX traversable handle that represents the entry point for ray traversal</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Acceleration Structure Root</strong></td>
+                        <td>Acts as the root of the acceleration structure hierarchy (GAS/IAS tree)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Scene Graph Container</strong></td>
+                        <td>Contains all geometry instances, groups, and their transformations</td>
+                    </tr>
+                    <tr>
+                        <td><strong>SBT Coordination</strong></td>
+                        <td>Works with the Shader Binding Table to map geometry to hit programs</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Dynamic Updates</strong></td>
+                        <td>Supports dynamic scene modifications through AS rebuilds or refits</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Internal Operations:</h3>
+            <div class="code-block">
+                <pre>// Scene manages these components internally:
+1. Top-level IAS (Instance Acceleration Structure)
+2. References to all GAS (Geometry Acceleration Structures)
+3. Instance transformations and properties
+4. Material/shader associations
+5. Traversable handle generation</pre>
+            </div>
+        </div>
+
+        <div class="section" id="lifecycle">
+            <h2>🔄 Scene Lifecycle</h2>
+            
+            <div class="lifecycle-diagram">
+                <h3>Complete Scene Setup Workflow:</h3>
+                
+                <div class="step">
+                    <strong>Step 1: Create OptiX Context</strong>
+                    <div class="code-block">
+                        <pre>optixu::Context optixContext = optixu::Context::create(cuContext, 4);</pre>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <strong>Step 2: Create Scene</strong>
+                    <div class="code-block">
+                        <pre>optixu::Scene scene = optixContext.createScene();</pre>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <strong>Step 3: Create and Configure Pipeline</strong>
+                    <div class="code-block">
+                        <pre>optixu::Pipeline pipeline = optixContext.createPipeline();
+pipeline.setPipelineOptions(...);
+// Create modules, programs, hit groups...</pre>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <strong>Step 4: Build Geometry and Acceleration Structures</strong>
+                    <div class="code-block">
+                        <pre>// Create geometry instances
+optixu::GeometryInstance geomInst = scene.createGeometryInstance();
+// Build GAS
+optixu::GeometryAccelerationStructure gas = scene.createGeometryAccelerationStructure();
+// Create instances for IAS
+optixu::Instance instance = scene.createInstance();</pre>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <strong>Step 5: Link Pipeline</strong>
+                    <div class="code-block">
+                        <pre>pipeline.link(maxTraceDepth);</pre>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <strong>Step 6: Set Scene on Pipeline ⭐</strong>
+                    <div class="code-block">
+                        <pre>pipeline.setScene(scene);</pre>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <strong>Step 7: Set Shader Binding Table</strong>
+                    <div class="code-block">
+                        <pre>pipeline.setHitGroupShaderBindingTable(hitGroupSBT, sbtPtr);</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section" id="when-to-call">
+            <h2>⏰ When to Call setScene()</h2>
+            
+            <div class="important">
+                <strong>Critical Timing:</strong> <code>pipeline.setScene()</code> is called:
+                <ul>
+                    <li><strong>ONLY ONCE</strong> during initialization</li>
+                    <li><strong>AFTER</strong> the pipeline has been linked (<code>pipeline.link()</code>)</li>
+                    <li><strong>BEFORE</strong> launching any ray generation programs</li>
+                    <li><strong>You do NOT need to call it again</strong> when geometry changes - just update the traversable handle in your launch parameters</li>
+                </ul>
+            </div>
+
+            <h3>Correct Order:</h3>
+            <div class="code-block">
+                <pre><span class="comment">// 1. Build all geometry and acceleration structures</span>
+<span class="comment">// 2. Create and configure pipeline programs</span>
+<span class="comment">// 3. Link the pipeline</span>
+pipeline.<span class="function">link</span>(maxTraceDepth);
+
+<span class="comment">// 4. NOW set the scene</span>
+pipeline.<span class="function">setScene</span>(scene);
+
+<span class="comment">// 5. Set the shader binding table</span>
+pipeline.<span class="function">setHitGroupShaderBindingTable</span>(hitGroupSBT, sbtPtr);
+
+<span class="comment">// 6. Ready to launch rays!</span>
+pipeline.<span class="function">launch</span>(stream, plpOnDevice, width, height);</pre>
+            </div>
+
+            <h3>When to Call setScene():</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Scenario</th>
+                        <th>Action Required</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Initial setup</td>
+                        <td>Call <code>setScene()</code> once after pipeline link</td>
+                    </tr>
+                    <tr>
+                        <td>Geometry added/removed</td>
+                        <td>Rebuild AS, update traversable handle in launch params - NO need to call <code>setScene()</code> again</td>
+                    </tr>
+                    <tr>
+                        <td>Instance transform only</td>
+                        <td>Update/refit IAS, update traversable handle in launch params</td>
+                    </tr>
+                    <tr>
+                        <td>Material change only</td>
+                        <td>Update SBT only</td>
+                    </tr>
+                    <tr>
+                        <td>Pipeline reconfiguration</td>
+                        <td>Relink pipeline, may need to call <code>setScene()</code> again</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section" id="usage-patterns">
+            <h2>🎨 Common Usage Patterns</h2>
+            
+            <h3>Pattern 1: Simple Static Scene</h3>
+            <div class="code-block">
+                <pre><span class="comment">// For a simple, static scene</span>
+<span class="type">optixu::Scene</span> scene = optixContext.<span class="function">createScene</span>();
+
+<span class="comment">// ... build geometry ...</span>
+
+pipeline.<span class="function">link</span>(1);  <span class="comment">// Single level traversal</span>
+pipeline.<span class="function">setScene</span>(scene);
+pipeline.<span class="function">setHitGroupShaderBindingTable</span>(hitGroupSBT, sbtPtr);
+
+<span class="comment">// Scene is ready for rendering</span></pre>
+            </div>
+
+            <h3>Pattern 2: Dynamic Scene with Updates</h3>
+            <div class="code-block">
+                <pre><span class="comment">// For scenes that change during runtime</span>
+<span class="keyword">struct</span> <span class="type">PipelineLaunchParameters</span> {
+    <span class="type">OptixTraversableHandle</span> travHandle;
+    <span class="comment">// ... other parameters ...</span>
+};
+
+<span class="keyword">class</span> <span class="type">DynamicScene</span> {
+    <span class="type">optixu::Scene</span> scene;
+    <span class="type">optixu::Pipeline</span> pipeline;
+    <span class="type">PipelineLaunchParameters</span> plp;
+    
+    <span class="keyword">void</span> <span class="function">initialize</span>() {
+        <span class="comment">// ... create scene, pipeline, etc ...</span>
+        pipeline.<span class="function">link</span>(maxDepth);
+        pipeline.<span class="function">setScene</span>(scene);  <span class="comment">// Call setScene() ONCE during init</span>
+    }
+    
+    <span class="keyword">void</span> <span class="function">updateAndRender</span>() {
+        <span class="comment">// Mark dirty and rebuild/refit acceleration structures</span>
+        gas.<span class="function">markDirty</span>();
+        gas.<span class="function">rebuild</span>(stream, gasMem, scratchMem);
+        
+        <span class="comment">// Get the updated traversable handle</span>
+        plp.travHandle = ias.<span class="function">getTraversableHandle</span>();
+        
+        <span class="comment">// Launch with updated traversable - NO setScene() call needed!</span>
+        pipeline.<span class="function">launch</span>(stream, plpOnDevice, width, height);
+    }
+};</pre>
+            </div>
+
+            <h3>Pattern 3: Multi-Pipeline Scene Sharing</h3>
+            <div class="code-block">
+                <pre><span class="comment">// Multiple pipelines can share the same scene</span>
+<span class="type">optixu::Scene</span> sharedScene = optixContext.<span class="function">createScene</span>();
+
+<span class="comment">// Primary ray pipeline</span>
+<span class="type">optixu::Pipeline</span> primaryPipeline = optixContext.<span class="function">createPipeline</span>();
+primaryPipeline.<span class="function">link</span>(1);
+primaryPipeline.<span class="function">setScene</span>(sharedScene);
+
+<span class="comment">// Shadow ray pipeline (different programs, same geometry)</span>
+<span class="type">optixu::Pipeline</span> shadowPipeline = optixContext.<span class="function">createPipeline</span>();
+shadowPipeline.<span class="function">link</span>(1);
+shadowPipeline.<span class="function">setScene</span>(sharedScene);</pre>
+            </div>
+        </div>
+
+        <div class="section" id="best-practices">
+            <h2>✅ Best Practices</h2>
+            
+            <div class="info-box">
+                <h3>DO:</h3>
+                <ul>
+                    <li>✓ Always call <code>setScene()</code> after <code>pipeline.link()</code></li>
+                    <li>✓ Build all geometry before setting the scene</li>
+                    <li>✓ Update SBT when geometry count changes</li>
+                    <li>✓ Call <code>setScene()</code> again after major scene structure changes</li>
+                    <li>✓ Use scene updates for animation rather than rebuilding</li>
+                </ul>
+            </div>
+            
+            <div class="important">
+                <h3>DON'T:</h3>
+                <ul>
+                    <li>✗ Don't call <code>setScene()</code> before linking the pipeline</li>
+                    <li>✗ Don't forget to update SBT when adding new geometry</li>
+                    <li>✗ Don't rebuild the entire scene for transform-only changes</li>
+                    <li>✗ Don't launch rays without setting a scene</li>
+                    <li>✗ Don't modify scene structure during ray traversal</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section" id="examples">
+            <h2>💻 Complete Code Examples</h2>
+            
+            <h3>Example 1: Minimal Scene Setup</h3>
+            <div class="code-block">
+                <pre><span class="keyword">#include</span> <span class="string">"optixu/optixu.h"</span>
+
+<span class="keyword">void</span> <span class="function">setupMinimalScene</span>() {
+    <span class="comment">// Initialize CUDA and OptiX</span>
+    <span class="type">CUcontext</span> cuContext;
+    <span class="function">cuInit</span>(0);
+    <span class="function">cuCtxCreate</span>(&cuContext, 0, 0);
+    
+    <span class="comment">// Create OptiX context and scene</span>
+    <span class="type">optixu::Context</span> optixContext = <span class="type">optixu::Context</span>::<span class="function">create</span>(cuContext, 4);
+    <span class="type">optixu::Scene</span> scene = optixContext.<span class="function">createScene</span>();
+    
+    <span class="comment">// Create pipeline</span>
+    <span class="type">optixu::Pipeline</span> pipeline = optixContext.<span class="function">createPipeline</span>();
+    pipeline.<span class="function">setPipelineOptions</span>(...);
+    
+    <span class="comment">// Create geometry and build GAS</span>
+    <span class="type">optixu::GeometryInstance</span> geomInst = scene.<span class="function">createGeometryInstance</span>();
+    <span class="comment">// ... setup vertices and triangles ...</span>
+    
+    <span class="type">optixu::GeometryAccelerationStructure</span> gas = scene.<span class="function">createGeometryAccelerationStructure</span>();
+    gas.<span class="function">addChild</span>(geomInst);
+    gas.<span class="function">prepareForBuild</span>(&asMemReqs);
+    gas.<span class="function">build</span>(stream, gasBuffer, scratchBuffer);
+    
+    <span class="comment">// Create instance for IAS</span>
+    <span class="type">optixu::Instance</span> instance = scene.<span class="function">createInstance</span>();
+    instance.<span class="function">setGAS</span>(gas);
+    
+    <span class="comment">// Link pipeline BEFORE setScene</span>
+    pipeline.<span class="function">link</span>(1);
+    
+    <span class="comment">// Set scene on pipeline</span>
+    pipeline.<span class="function">setScene</span>(scene);
+    
+    <span class="comment">// Set shader binding table</span>
+    pipeline.<span class="function">setHitGroupShaderBindingTable</span>(hitGroupSBT, sbtPtr);
+    
+    <span class="comment">// Now ready to launch rays</span>
+    pipeline.<span class="function">launch</span>(stream, plpOnDevice, width, height);
+}</pre>
+            </div>
+
+            <h3>Example 2: Scene with Dynamic Updates (Based on scene_edit sample)</h3>
+            <div class="code-block">
+                <pre><span class="keyword">class</span> <span class="type">RenderEngine</span> {
+<span class="keyword">private</span>:
+    <span class="type">optixu::Context</span> m_optixContext;
+    <span class="type">optixu::Scene</span> m_scene;
+    <span class="type">optixu::Pipeline</span> m_pipeline;
+    <span class="type">OptixTraversableHandle</span> m_currentTravHandle = 0;
+    
+    <span class="keyword">struct</span> <span class="type">PipelineLaunchParameters</span> {
+        <span class="type">OptixTraversableHandle</span> travHandle;
+        <span class="comment">// ... other parameters ...</span>
+    } m_plp;
+    
+<span class="keyword">public</span>:
+    <span class="keyword">void</span> <span class="function">initialize</span>() {
+        m_scene = m_optixContext.<span class="function">createScene</span>();
+        m_pipeline = m_optixContext.<span class="function">createPipeline</span>();
+        
+        <span class="comment">// Setup pipeline programs...</span>
+        m_pipeline.<span class="function">link</span>(2);  <span class="comment">// Max trace depth</span>
+        
+        <span class="comment">// Call setScene() ONCE during initialization</span>
+        m_pipeline.<span class="function">setScene</span>(m_scene);
+        m_pipeline.<span class="function">setHitGroupShaderBindingTable</span>(m_hitGroupSBT, m_sbtPtr);
+    }
+    
+    <span class="keyword">void</span> <span class="function">addGeometry</span>(<span class="keyword">const</span> <span class="type">GeometryData</span>& data) {
+        <span class="comment">// Create new geometry instance</span>
+        <span class="type">optixu::GeometryInstance</span> geomInst = m_scene.<span class="function">createGeometryInstance</span>();
+        <span class="comment">// ... setup geometry ...</span>
+        
+        <span class="comment">// Mark dirty and rebuild acceleration structures</span>
+        gas.<span class="function">markDirty</span>();
+        ias.<span class="function">markDirty</span>();
+        
+        <span class="comment">// Get the new traversable handle</span>
+        m_currentTravHandle = ias.<span class="function">getTraversableHandle</span>();
+        
+        <span class="comment">// NO need to call setScene() again!</span>
+    }
+    
+    <span class="keyword">void</span> <span class="function">updateTransforms</span>(<span class="keyword">const</span> <span class="type">std::vector</span><<span class="type">Matrix4</span>>& transforms) {
+        <span class="comment">// Update instance transforms</span>
+        <span class="comment">// ... update transform data ...</span>
+        
+        <span class="comment">// Mark IAS dirty for refit</span>
+        ias.<span class="function">markDirty</span>();
+        
+        <span class="comment">// Get updated traversable handle</span>
+        m_currentTravHandle = ias.<span class="function">getTraversableHandle</span>();
+    }
+    
+    <span class="keyword">void</span> <span class="function">render</span>() {
+        <span class="comment">// Update launch parameters with current traversable</span>
+        m_plp.travHandle = m_currentTravHandle;
+        
+        <span class="comment">// Copy parameters to device and launch</span>
+        <span class="function">cuMemcpyHtoDAsync</span>(m_plpOnDevice, &m_plp, <span class="keyword">sizeof</span>(m_plp), m_stream);
+        m_pipeline.<span class="function">launch</span>(m_stream, m_plpOnDevice, m_width, m_height);
+    }
+};</pre>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📝 Summary</h2>
+            <p>The <code>optixu::Scene</code> is the central organizing structure for all geometry in OptiX ray tracing. Understanding when and how to use <code>setScene()</code> is crucial for proper pipeline configuration:</p>
+            
+            <ol>
+                <li><strong>Scene Creation:</strong> Create the scene early, right after the OptiX context</li>
+                <li><strong>Geometry Building:</strong> Add all geometry and build acceleration structures</li>
+                <li><strong>Pipeline Setup:</strong> Configure and link the pipeline</li>
+                <li><strong>Scene Association:</strong> Call <code>pipeline.setScene()</code> AFTER linking</li>
+                <li><strong>SBT Configuration:</strong> Set the shader binding table</li>
+                <li><strong>Ray Tracing:</strong> Launch rays with confidence!</li>
+            </ol>
+            
+            <div class="info-box">
+                <strong>Remember:</strong> The golden rule is that <code>setScene()</code> is called ONCE after <code>pipeline.link()</code> and before launching any rays. For dynamic scenes, you update the traversable handle in your launch parameters, not by calling <code>setScene()</code> again. The scene automatically maintains its traversable handle as acceleration structures are rebuilt or refitted.
+            </div>
+        </div>
+    </div>
+</body>
+</html>
